@@ -1,0 +1,905 @@
+﻿﻿<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TiendaLIZ</title>
+    <link rel="manifest" href="./manifest.json">
+    <link rel="icon" type="image/x-icon" href="./favicon.ico">
+    <meta name="theme-color" content="#C2714F">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="TiendaLIZ">
+    <link rel="apple-touch-icon" href="./icon/icon-192.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://unpkg.com/dexie@latest/dist/dexie.js"></script>
+    <style>
+        .fab {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 50;
+        }
+
+        ::-webkit-scrollbar {
+            width: 0px;
+            background: transparent;
+        }
+
+        #reader {
+            width: 100%;
+        }
+
+        .product-card {
+            transition: transform 0.1s, box-shadow 0.1s;
+        }
+    </style>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then(reg => console.log('SW registered:', reg.scope))
+                    .catch(err => console.log('SW registration failed:', err));
+            });
+        }
+    </script>
+</head>
+
+<body class="bg-gray-100 select-none">
+    <!-- Login Container -->
+    <div id="login-container" class="fixed inset-0 z-50 bg-gray-100 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden">
+            <div class="bg-blue-600 p-6 text-center">
+                <h1 class="text-2xl font-bold text-white mb-2">CloudStore</h1>
+                <p class="text-blue-100">Inicia sesión para continuar</p>
+            </div>
+            <div class="p-6 space-y-4">
+                <!-- Login Form -->
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Correo Electrónico</label>
+                        <input type="email" id="email-input"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                            placeholder="tu@email.com" value="tiendaliz@gmail.com">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Contraseña</label>
+                        <input type="password" id="password-input"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                            placeholder="••••••••">
+                    </div>
+
+                    <button id="login-btn"
+                        class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-colors shadow-lg hover:shadow-xl transform hover:-translate-y-0.5">
+                        Iniciar Sesión
+                    </button>
+                </div>
+
+                <div id="login-message" class="text-center text-sm text-red-500 hidden"></div>
+                <div id="login-loading" class="hidden flex justify-center py-2">
+                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main App -->
+    <div id="app" class="hidden">
+        <!-- Header -->
+        <header class="bg-blue-600 text-white p-4 shadow-lg sticky top-0 z-40">
+            <div class="max-w-md mx-auto flex justify-between items-center">
+                <h1 class="text-xl font-bold flex items-center gap-2">
+                    <span class="text-2xl">☁️</span> CloudStore
+                </h1>
+                <div class="flex items-center gap-3">
+                    <div id="sync-status"
+                        class="w-3 h-3 rounded-full bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.8)]" title="Online">
+                    </div>
+                    <button id="sync-btn" onclick="window.syncManager.fullSync()" class="text-white/80 hover:text-white"
+                        title="Sincronizar">
+                        <svg id="sync-icon" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none"
+                            viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                    </button>
+
+                    <button onclick="window.restockList.openModal()" class="text-white/80 hover:text-white relative">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                        </svg>
+                        <span id="restock-badge"
+                            class="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center hidden">0</span>
+                    </button>
+                    <button onclick="window.auth.logout()" class="text-white/80 hover:text-white">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <!-- Tabs -->
+            <div class="flex mt-4 bg-blue-700/50 rounded-xl p-1 max-w-md mx-auto">
+                <button onclick="window.ui.switchTab('inventario')" id="tab-inventario"
+                    class="flex-1 py-2 rounded-lg text-sm font-bold transition-all bg-white text-blue-600 shadow-sm">
+                    📦 Inventario
+                </button>
+                <button onclick="window.ui.switchTab('ventas')" id="tab-ventas"
+                    class="flex-1 py-2 rounded-lg text-sm font-bold transition-all text-blue-100 hover:bg-white/10">
+                    💰 Ventas
+                </button>
+                <button onclick="window.ui.switchTab('reportes')" id="tab-reportes"
+                    class="flex-1 py-2 rounded-lg text-sm font-bold transition-all text-blue-100 hover:bg-white/10">
+                    📊 Reportes
+                </button>
+            </div>
+        </header>
+
+        <!-- Category Filter Section (OLD - hidden, replaced by radial menu) -->
+        <section id="category-filter-section" class="bg-white shadow-sm p-3 sticky top-[136px] z-30 hidden">
+            <div class="max-w-md mx-auto">
+                <div class="flex items-center gap-2 mb-3">
+                    <span class="text-gray-600 text-sm font-medium">Filtrar: </span>
+                    <select id="category-select" onchange="window.categoryFilter.filter(this.value)"
+                        class="flex-1 p-2 border border-gray-300 rounded-lg text-sm">
+                        <option value="">-- Todas las categorias --</option>
+                    </select>
+                    <button onclick="window.categoryFilter.clear()" id="clear-filter-btn"
+                        class="bg-red-500 text-white px-2 py-1 rounded text-xs hidden">X</button>
+                </div>
+                <div class="flex items-center justify-between mb-1">
+                    <div class="text-xs text-gray-500">Top categorias:</div>
+                    <button onclick="window.pdfExport.openExportModal()"
+                        class="bg-gradient-to-r from-purple-500 to-purple-600 text-white px-3 py-1 rounded-lg text-xs font-bold shadow hover:from-purple-600 hover:to-purple-700 flex items-center gap-1">
+                        📄 Exportar PDF
+                    </button>
+                </div>
+                <div id="category-chips" class="flex gap-2 overflow-x-auto pb-2"></div>
+            </div>
+        </section>
+
+        <!-- Tab Content: Inventario -->
+        <div id="content-inventario">
+            <main id="product-list" class="p-4 space-y-4 max-w-md mx-auto pb-24">
+                <div class="text-center text-gray-500 mt-10">Cargando productos...</div>
+            </main>
+        </div>
+        <!-- Tab Content: Ventas (FULL SCREEN + FLOATING CART) -->
+        <div id="content-ventas" class="hidden flex flex-col max-w-md mx-auto relative"
+            style="height: calc(100vh - 140px);">
+            <!-- Section 1: Categories -->
+            <section id="sales-categories" class="bg-white shadow-sm p-3 border-b-2 border-gray-100 flex-shrink-0">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="text-gray-600 text-sm font-medium">📁 Categoría:</span>
+                </div>
+                <div id="sales-category-buttons" class="flex gap-2 overflow-x-auto pb-2">
+                    <!-- Populated by sales.js -->
+                </div>
+            </section>
+
+            <!-- Section 2: Products Grid (FULL HEIGHT) -->
+            <section id="sales-products" class="flex-1 overflow-y-auto p-3 pb-24 bg-gray-50">
+                <div id="sales-products-grid" class="grid grid-cols-3 gap-3">
+                    <div class="col-span-3 text-center text-gray-400 py-8">Cargando productos...</div>
+                </div>
+            </section>
+
+            <!-- Floating Cart Button -->
+            <button id="cart-fab"
+                class="hidden fixed bottom-6 right-6 w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-700 text-white rounded-full shadow-2xl flex items-center justify-center z-40 hover:scale-110 active:scale-95 transition-transform">
+                <span class="text-2xl">🛒</span>
+                <span id="cart-badge"
+                    class="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center hidden">0</span>
+            </button>
+
+            <!-- Cart Panel (Slide Up) -->
+            <div id="cart-panel"
+                class="fixed inset-x-0 bottom-0 max-w-md mx-auto bg-white rounded-t-3xl shadow-2xl transform translate-y-full transition-transform duration-300 z-50 flex flex-col"
+                style="max-height: 90vh;">
+                <!-- Cart Header -->
+                <div class="flex justify-between items-center p-4 text-white rounded-t-3xl"
+                    style="background: linear-gradient(to right, #C2714F, #A85D3F);">
+                    <div class="flex items-center gap-2">
+                        <span class="text-xl">🛒</span>
+                        <span class="font-bold text-lg">Carrito</span>
+                        <span id="cart-count" class="text-sm bg-white px-2 py-0.5 rounded-full font-bold"
+                            style="color: #C2714F;">0 items</span>
+                    </div>
+                    <button onclick="window.sales.toggleCart()"
+                        class="text-white text-2xl hover:bg-white/20 rounded-full w-10 h-10 flex items-center justify-center">✕</button>
+                </div>
+
+                <!-- Cart Items -->
+                <div id="cart-items" class="flex-1 overflow-y-auto p-3 bg-gray-50">
+                    <div class="text-center text-gray-400 text-sm py-8">Carrito vacío - Toca un producto para agregar
+                    </div>
+                </div>
+
+                <!-- Extra Section -->
+                <div class="p-1.5 bg-gradient-to-r from-purple-50 to-pink-50 border-t border-purple-100">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-sm font-bold text-purple-700">✨ Extra</span>
+                        <span id="extra-amount" class="text-lg font-bold text-purple-600">Bs 0.00</span>
+                    </div>
+                    <div class="flex justify-center gap-2 mb-3">
+                        <button id="extra-mode-add" onclick="window.sales.setExtraMode('add')"
+                            class="flex-1 py-2 px-4 rounded-xl font-bold text-sm transition-all duration-200 bg-green-500 text-white shadow-md">➕
+                            Sumar</button>
+                        <button id="extra-mode-sub" onclick="window.sales.setExtraMode('sub')"
+                            class="flex-1 py-2 px-4 rounded-xl font-bold text-sm transition-all duration-200 bg-gray-200 text-gray-500">➖
+                            Restar</button>
+                    </div>
+                    <div class="flex justify-center gap-2">
+                        <button onclick="window.sales.addExtra(0.1)"
+                            class="flex-1 py-2 px-3 rounded-xl font-bold text-sm bg-white border-2 border-purple-200 text-purple-600 hover:bg-purple-100 active:scale-95 transition-all shadow-sm">0.10</button>
+                        <button onclick="window.sales.addExtra(0.5)"
+                            class="flex-1 py-2 px-3 rounded-xl font-bold text-sm bg-white border-2 border-purple-200 text-purple-600 hover:bg-purple-100 active:scale-95 transition-all shadow-sm">0.50</button>
+                        <button onclick="window.sales.addExtra(1)"
+                            class="flex-1 py-2 px-3 rounded-xl font-bold text-sm bg-white border-2 border-purple-200 text-purple-600 hover:bg-purple-100 active:scale-95 transition-all shadow-sm">1</button>
+                        <button onclick="window.sales.addExtra(5)"
+                            class="flex-1 py-2 px-3 rounded-xl font-bold text-sm bg-white border-2 border-purple-200 text-purple-600 hover:bg-purple-100 active:scale-95 transition-all shadow-sm">5</button>
+                        <button onclick="window.sales.addExtra(10)"
+                            class="flex-1 py-2 px-3 rounded-xl font-bold text-sm bg-white border-2 border-purple-200 text-purple-600 hover:bg-purple-100 active:scale-95 transition-all shadow-sm">10</button>
+                        <button onclick="window.sales.resetExtra()"
+                            class="py-2 px-3 rounded-xl font-bold text-sm bg-gray-100 border-2 border-gray-200 text-gray-500 hover:bg-gray-200 active:scale-95 transition-all">🔄</button>
+                    </div>
+                </div>
+
+                <!-- Cart Footer -->
+                <div class="p-2 border-t" style="background: linear-gradient(to right, #48BB78, #68D391);">
+                    <div class="flex justify-between items-center text-white mb-1">
+                        <span class="text-lg font-medium">TOTAL:</span>
+                        <span id="cart-total" class="text-2xl font-bold">Bs 0.00</span>
+                    </div>
+                    <div class="flex gap-3">
+                        <!-- Change Calculator -->
+                        <div class="w-full bg-white/10 rounded-xl p-2 mb-2">
+                            <div class="flex justify-between items-center text-white text-sm mb-2">
+                                <span>💵 Recibido:</span>
+                                <span id="received-amount" class="font-bold text-lg">Bs 0.00</span>
+                            </div>
+                            <div class="flex gap-1 mb-2 flex-wrap">
+                                <button onclick="window.sales.addReceived(1)"
+                                    class="flex-1 min-w-[35px] py-1.5 bg-white/20 hover:bg-white/30 text-white text-xs font-bold rounded-lg active:scale-95">1</button>
+                                <button onclick="window.sales.addReceived(5)"
+                                    class="flex-1 min-w-[35px] py-1.5 bg-white/20 hover:bg-white/30 text-white text-xs font-bold rounded-lg active:scale-95">5</button>
+                                <button onclick="window.sales.addReceived(10)"
+                                    class="flex-1 min-w-[35px] py-1.5 bg-white/20 hover:bg-white/30 text-white text-xs font-bold rounded-lg active:scale-95">10</button>
+                                <button onclick="window.sales.addReceived(20)"
+                                    class="flex-1 min-w-[35px] py-1.5 bg-white/20 hover:bg-white/30 text-white text-xs font-bold rounded-lg active:scale-95">20</button>
+                                <button onclick="window.sales.addReceived(50)"
+                                    class="flex-1 min-w-[35px] py-1.5 bg-white/20 hover:bg-white/30 text-white text-xs font-bold rounded-lg active:scale-95">50</button>
+                                <button onclick="window.sales.addReceived(100)"
+                                    class="flex-1 min-w-[35px] py-1.5 bg-white/20 hover:bg-white/30 text-white text-xs font-bold rounded-lg active:scale-95">100</button>
+                                <button onclick="window.sales.addReceived(200)"
+                                    class="flex-1 min-w-[35px] py-1.5 bg-white/20 hover:bg-white/30 text-white text-xs font-bold rounded-lg active:scale-95">200</button>
+                                <button onclick="window.sales.resetReceived()"
+                                    class="py-1.5 px-2 bg-red-400/50 hover:bg-red-400/70 text-white text-xs font-bold rounded-lg active:scale-95">🔄</button>
+                            </div>
+                            <div class="flex justify-between items-center text-white border-t border-white/20 pt-2">
+                                <span class="font-bold">📢 CAMBIO:</span>
+                                <span id="change-amount" class="text-2xl font-bold text-yellow-300">Bs 0.00</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex gap-3">
+                        <button onclick="window.sales.clearCart()"
+                            class="flex-1 bg-red-500 hover:bg-red-600 text-white py-3 px-4 rounded-xl font-bold text-sm active:scale-95 transition-transform">🗑️
+                            Limpiar</button>
+                        <button onclick="window.sales.confirmCartSale()"
+                            class="flex-[2] bg-white text-green-600 hover:bg-gray-100 py-3 px-4 rounded-xl font-bold text-base active:scale-95 transition-transform shadow-lg">✅
+                            Confirmar Venta</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cart Overlay -->
+            <div id="cart-overlay" onclick="window.sales.toggleCart()" class="fixed inset-0 bg-black/50 z-40 hidden">
+            </div>
+        </div>
+        <!-- Tab Content: Reportes -->
+        <div id="content-reportes" class="hidden p-4 max-w-md mx-auto">
+            <!-- Populated by reports.js -->
+        </div>
+
+        <!-- FAB (Only on Inventario) -->
+        <button id="fab-btn" onclick="window.app.openAddModal()" class="fab text-white rounded-full p-4 shadow-lg"
+            style="background-color: #C2714F;">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24"
+                stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+            </svg>
+        </button>
+    </div>
+
+    <!-- QR View Modal -->
+    <div id="qr-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-lg p-6 max-w-sm w-full">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="font-bold text-lg">Código QR</h3>
+                <button onclick="window.ui.closeModal('qr-modal')" class="text-gray-500 hover:text-gray-700">✕</button>
+            </div>
+            <p id="qr-product-name" class="text-center text-gray-600 mb-4"></p>
+            <div id="qr-display" class="flex justify-center mb-4"></div>
+            <button onclick="window.app.downloadQR()"
+                class="w-full bg-blue-500 text-white p-2 rounded hover:bg-blue-600">📥 Descargar QR</button>
+        </div>
+    </div>
+
+    <!-- QR Scanner Modal -->
+    <div id="scanner-modal"
+        class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-lg w-full max-w-md overflow-hidden">
+            <div class="bg-green-600 p-4 text-white flex justify-between items-center">
+                <h2 class="text-lg font-bold">📷 Escanear QR</h2>
+                <button onclick="window.app.closeScanner()" class="text-white hover:text-gray-200">✕</button>
+            </div>
+            <div class="p-4">
+                <div id="reader" class="border rounded mb-4"></div>
+                <button onclick="window.app.startScanner()" id="start-scan-btn"
+                    class="w-full bg-green-500 text-white p-2 rounded">Iniciar Escáner</button>
+                <button onclick="window.app.stopScanner()" id="stop-scan-btn"
+                    class="hidden w-full bg-red-500 text-white p-2 rounded">Detener Escáner</button>
+                <div id="scan-result" class="mt-4 p-3 bg-gray-100 rounded hidden">
+                    <p class="text-sm text-gray-600">Producto encontrado:</p>
+                    <p id="scan-result-name" class="font-bold"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- PDF Export Modal -->
+    <div id="pdf-export-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div
+                class="bg-gradient-to-r from-purple-600 to-purple-700 p-4 text-white flex justify-between items-center sticky top-0 z-10">
+                <h2 class="text-lg font-bold flex items-center gap-2">📄 Exportar Inventario a PDF</h2>
+                <button onclick="window.pdfExport.closeExportModal()"
+                    class="text-white text-2xl hover:bg-white/20 rounded-full w-8 h-8 flex items-center justify-center transition-all">✕</button>
+            </div>
+            <div class="p-4 space-y-4">
+                <!-- Fields Section -->
+                <div class="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4 border border-gray-200">
+                    <h3 class="text-sm font-bold text-gray-700 mb-3">📊 CAMPOS A INCLUIR</h3>
+                    <div class="space-y-2">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox"
+                                id="pdf-field-image" checked onchange="window.pdfExport.toggleField('image')"
+                                class="rounded"><span class="text-sm">🖼️ Imagen miniatura</span></label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="pdf-field-name"
+                                checked onchange="window.pdfExport.toggleField('name')" class="rounded"><span
+                                class="text-sm">📝 Nombre del producto</span></label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox"
+                                id="pdf-field-category" checked onchange="window.pdfExport.toggleField('category')"
+                                class="rounded"><span class="text-sm">🏷️ Categoría</span></label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox"
+                                id="pdf-field-stock" checked onchange="window.pdfExport.toggleField('stock')"
+                                class="rounded"><span class="text-sm">📦 Stock actual</span></label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox"
+                                id="pdf-field-qrCode" onchange="window.pdfExport.toggleField('qrCode')"
+                                class="rounded"><span class="text-sm">📱 Código QR</span></label>
+                    </div>
+                </div>
+                <!-- Prices Section -->
+                <div class="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4 border border-green-200">
+                    <h3 class="text-sm font-bold text-gray-700 mb-3">💰 PRECIOS</h3>
+                    <div class="space-y-2">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox"
+                                id="pdf-field-priceBuyPackage"
+                                onchange="window.pdfExport.toggleField('priceBuyPackage')" class="rounded"><span
+                                class="text-sm">📦 Costo compra (paquete)</span></label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox"
+                                id="pdf-field-priceBuyUnit" onchange="window.pdfExport.toggleField('priceBuyUnit')"
+                                class="rounded"><span class="text-sm">🔢 Costo unitario</span></label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox"
+                                id="pdf-field-priceSellUnit" checked
+                                onchange="window.pdfExport.toggleField('priceSellUnit')" class="rounded"><span
+                                class="text-sm">💵 Precio venta (unidad)</span></label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox"
+                                id="pdf-field-priceSellPackage"
+                                onchange="window.pdfExport.toggleField('priceSellPackage')" class="rounded"><span
+                                class="text-sm">📦 Precio venta (paquete)</span></label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox"
+                                id="pdf-field-profit" onchange="window.pdfExport.toggleField('profit')"
+                                class="rounded"><span class="text-sm">📈 Ganancia estimada</span></label>
+                    </div>
+                </div>
+                <!-- Additional Info Section -->
+                <div class="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-4 border border-purple-200">
+                    <h3 class="text-sm font-bold text-gray-700 mb-3">ℹ️ INFO ADICIONAL</h3>
+                    <div class="space-y-2">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox"
+                                id="pdf-field-expiryDate" onchange="window.pdfExport.toggleField('expiryDate')"
+                                class="rounded"><span class="text-sm">📅 Fecha de vencimiento</span></label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox"
+                                id="pdf-field-supplier" onchange="window.pdfExport.toggleField('supplier')"
+                                class="rounded"><span class="text-sm">📞 Proveedor</span></label>
+                    </div>
+                </div>
+                <!-- Columns Section -->
+                <div class="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
+                    <h3 class="text-sm font-bold text-gray-700 mb-3">🎨 FORMATO</h3>
+                    <div class="flex gap-2">
+                        <button id="pdf-cols-2" onclick="window.pdfExport.setColumns(2)"
+                            class="flex-1 py-2 px-4 rounded-lg font-bold text-sm bg-white text-gray-700 border-2 border-gray-200 hover:border-blue-400 transition-all">2
+                            columnas</button>
+                        <button id="pdf-cols-3" onclick="window.pdfExport.setColumns(3)"
+                            class="flex-1 py-2 px-4 rounded-lg font-bold text-sm bg-blue-600 text-white border-2 border-blue-600 hover:bg-blue-700 transition-all">3
+                            columnas</button>
+                        <button id="pdf-cols-4" onclick="window.pdfExport.setColumns(4)"
+                            class="flex-1 py-2 px-4 rounded-lg font-bold text-sm bg-white text-gray-700 border-2 border-gray-200 hover:border-blue-400 transition-all">4
+                            columnas</button>
+                    </div>
+                </div>
+                <!-- Export Button -->
+                <button id="pdf-export-btn" onclick="window.pdfExport.generatePDF()"
+                    class="w-full bg-gradient-to-r from-purple-600 to-purple-700 text-white p-4 rounded-xl font-bold text-lg hover:from-purple-700 hover:to-purple-800 shadow-lg transform transition hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2">📥
+                    Generar PDF</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Product Modal -->
+    <div id="product-modal"
+        class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden max-h-[90vh] overflow-y-auto">
+            <div class="p-4 text-white flex justify-between items-center sticky top-0 z-10"
+                style="background: linear-gradient(to right, #C2714F, #A85D3F);">
+                <h2 id="modal-title" class="text-lg font-bold flex items-center gap-2">📦 Nuevo Producto</h2>
+                <button onclick="window.ui.closeModal('product-modal')"
+                    class="text-white text-2xl hover:bg-white/20 rounded-full w-8 h-8 flex items-center justify-center transition-all">✕</button>
+            </div>
+            <form id="product-form" class="p-4 space-y-4">
+                <input type="hidden" id="product-id">
+                <input type="hidden" id="existing-image-url">
+                <input type="hidden" id="existing-qr-url">
+                <!-- Image Upload -->
+                <div class="relative">
+                    <div id="image-preview"
+                        class="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center cursor-pointer hover:bg-gray-50 hover:border-blue-400 transition-all"
+                        onclick="document.getElementById('product-image').click()">
+                        <span class="text-4xl block mb-2">📷</span>
+                        <span class="text-gray-400 text-sm">Toca para subir imagen</span>
+                    </div>
+                    <img id="preview-img" src="" class="w-full h-48 object-cover rounded-xl hidden mt-2 shadow-lg">
+                    <input type="file" id="product-image" accept="image/*" class="hidden">
+                </div>
+                <!-- SECTION: Basic Info -->
+                <div class="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4 border border-gray-200">
+                    <h3 class="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">🏷️ INFORMACIÓN BÁSICA</h3>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-xs font-medium text-gray-500 mb-1">Nombre del Producto</label>
+                            <input type="text" id="name" required placeholder="Ej: Coca Cola 2L"
+                                class="block w-full rounded-lg border-gray-300 p-3 border focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all">
+                        </div>
+                        <div class="relative">
+                            <label class="block text-xs font-medium text-gray-500 mb-1">Categoría</label>
+                            <input type="text" id="category" required placeholder="Ej: bebidas"
+                                class="block w-full rounded-lg border-gray-300 p-3 border focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                                autocomplete="off">
+                            <div id="category-suggestions"
+                                class="absolute z-10 w-full bg-white border border-gray-300 rounded-lg shadow-lg hidden max-h-40 overflow-y-auto">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- SECTION: Product Type -->
+                <div class="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
+                    <h3 class="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">📦 TIPO DE PRODUCTO</h3>
+                    <div class="flex rounded-xl overflow-hidden shadow-sm border border-gray-200" role="group">
+                        <input type="hidden" id="product-type" value="unidades">
+                        <button type="button" id="type-unidades" onclick="window.app.setProductType('unidades')"
+                            class="flex-1 px-3 py-3 text-sm font-bold text-gray-900 bg-white hover:bg-blue-50 transition-all flex flex-col items-center gap-1"><span
+                                class="text-lg">🔢</span><span>Unidades</span></button>
+                        <button type="button" id="type-paquete" onclick="window.app.setProductType('paquete')"
+                            class="flex-1 px-3 py-3 text-sm font-bold text-gray-900 bg-white border-l border-r border-gray-200 hover:bg-blue-50 transition-all flex flex-col items-center gap-1"><span
+                                class="text-lg">📦</span><span>Paquete</span></button>
+                        <button type="button" id="type-ambos" onclick="window.app.setProductType('ambos')"
+                            class="flex-1 px-3 py-3 text-sm font-bold text-gray-900 bg-white hover:bg-blue-50 transition-all flex flex-col items-center gap-1"><span
+                                class="text-lg">📦+🔢</span><span>Ambos</span></button>
+                    </div>
+                </div>
+                <!-- Stock Control Options -->
+                <div class="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl p-4 border border-orange-200">
+                    <h3 class="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">⚙️ CONTROL DE INVENTARIO
+                    </h3>
+                    <label
+                        class="flex items-center justify-between cursor-pointer bg-white p-3 rounded-lg border border-orange-200 mb-3">
+                        <span class="flex items-center gap-2"><span class="text-lg">📊</span>
+                            <div><span class="text-sm font-medium text-gray-700">Controlar stock</span>
+                                <p class="text-xs text-gray-400">Reducir cantidad al vender</p>
+                            </div>
+                        </span>
+                        <div class="relative"><input type="checkbox" id="track-stock" class="sr-only peer" checked>
+                            <div
+                                class="w-11 h-6 bg-gray-300 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-orange-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500">
+                            </div>
+                        </div>
+                    </label>
+                    <div class="bg-white p-3 rounded-lg border border-orange-200">
+                        <label class="block text-xs font-bold text-orange-700 mb-1">⚠️ Stock Mínimo (alerta)</label>
+                        <input type="number" id="min-stock" min="0" value="0"
+                            class="block w-full rounded-lg border-orange-200 p-2 border text-center text-lg font-bold focus:ring-2 focus:ring-orange-400">
+                        <p class="text-xs text-gray-400 text-center mt-1">Alerta cuando baje de este valor (0=sin
+                            alerta)</p>
+                    </div>
+                </div>
+                <!-- Units per Package -->
+                <div id="units-per-pkg-container" class="hidden mt-3 bg-white p-3 rounded-lg border border-blue-300">
+                    <label class="block text-xs font-bold text-blue-700 mb-1">📊 Unidades por Paquete</label>
+                    <input type="number" id="units-per-package" min="1" value="1"
+                        class="block w-full rounded-lg border-blue-300 p-3 border text-center text-lg font-bold focus:ring-2 focus:ring-blue-500"
+                        oninput="window.app.calculateCosts()">
+                    <p class="text-xs text-gray-400 text-center mt-1">¿Cuántas unidades contiene cada paquete?</p>
+                </div>
+                <!-- SECTION: Inventory -->
+                <div class="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4 border border-green-200">
+                    <h3 class="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">📈 INVENTARIO</h3>
+                    <div id="quantity-simple-container">
+                        <label id="quantity-label" class="block text-xs font-medium text-gray-500 mb-1">Stock
+                            (Unidades)</label>
+                        <input type="number" id="quantity" required min="0" placeholder="0"
+                            class="block w-full rounded-lg border-gray-300 p-3 border text-center text-xl font-bold focus:ring-2 focus:ring-green-500 focus:border-green-500">
+                    </div>
+                    <div id="quantity-ambos-container" class="hidden space-y-3">
+                        <label class="block text-xs font-bold text-gray-600 mb-2">📦 Stock Inicial</label>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="bg-white p-3 rounded-lg border border-blue-200">
+                                <label class="block text-xs font-medium text-blue-600 mb-1">📦 Cajas</label>
+                                <input type="number" id="box-quantity" min="0" value="0"
+                                    class="block w-full rounded-lg border-blue-200 p-2 border text-center text-lg font-bold"
+                                    oninput="window.app.calculateTotalStock()">
+                            </div>
+                            <div class="bg-white p-3 rounded-lg border border-green-200">
+                                <label class="block text-xs font-medium text-green-600 mb-1">🔢 Sueltas</label>
+                                <input type="number" id="loose-units" min="0" value="0"
+                                    class="block w-full rounded-lg border-green-200 p-2 border text-center text-lg font-bold"
+                                    oninput="window.app.calculateTotalStock()">
+                            </div>
+                        </div>
+                        <div class="bg-white p-3 rounded-lg border border-gray-300 text-center">
+                            <span class="text-xs text-gray-500">Stock Total:</span>
+                            <span id="total-stock-display" class="text-xl font-bold text-blue-600 ml-2">0
+                                unidades</span>
+                            <p id="stock-display" class="text-xs text-gray-400 mt-1"></p>
+                        </div>
+                    </div>
+                </div>
+                <!-- Costs & Prices -->
+                <div class="grid grid-cols-2 gap-4">
+                    <div id="cost-pkg-container" class="hidden">
+                        <label class="block text-xs font-medium text-gray-500">Costo Compra (Paquete)</label>
+                        <input type="number" id="price-buy" step="0.01"
+                            class="mt-1 block w-full rounded-md border-gray-300 p-2 border"
+                            oninput="window.app.calculateCosts()">
+                    </div>
+                    <div id="price-pkg-container" class="hidden">
+                        <label class="block text-xs font-medium text-gray-500">Precio Venta (Paquete)</label>
+                        <input type="number" id="price-sell" step="0.01"
+                            class="mt-1 block w-full rounded-md border-gray-300 p-2 border"
+                            oninput="window.app.calculateProfit()">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500">Costo Unitario</label>
+                        <input type="number" id="unit-cost" step="0.01"
+                            class="mt-1 block w-full rounded-md border-gray-300 p-2 border"
+                            oninput="window.app.calculateCosts(true)">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500">Precio Venta (Unidad)</label>
+                        <input type="number" id="unit-price" step="0.01"
+                            class="mt-1 block w-full rounded-md border-gray-300 p-2 border"
+                            oninput="window.app.calculateProfit()">
+                    </div>
+                </div>
+                <!-- Profit Display -->
+                <div class="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                    <label class="block text-xs font-bold text-gray-500 mb-2">GANANCIA ESTIMADA</label>
+                    <div id="profit-pkg-container" class="hidden mb-2">
+                        <span class="text-xs text-gray-400">Por Paquete:</span>
+                        <span id="profit-pkg" class="font-bold text-gray-800">$0.00</span>
+                    </div>
+                    <div id="profit-unit-container">
+                        <span class="text-xs text-gray-400">Por Unidad:</span>
+                        <span id="profit-unit" class="font-bold text-gray-800">$0.00</span>
+                    </div>
+                </div>
+                <!-- SECTION: Additional Info -->
+                <div class="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-4 border border-purple-200">
+                    <h3 class="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">📋 INFORMACIÓN ADICIONAL
+                    </h3>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-xs font-medium text-gray-500 mb-1">📅 Fecha de Vencimiento</label>
+                            <input type="date" id="expiry-date"
+                                class="block w-full rounded-lg border-gray-300 p-3 border focus:ring-2 focus:ring-purple-500">
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 mb-1">🔖 Código Prov.</label>
+                                <input type="text" id="supplier-code" placeholder="ABC123"
+                                    class="block w-full rounded-lg border-gray-300 p-2 border">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 mb-1">📞 Teléfono Prov.</label>
+                                <input type="tel" id="supplier-phone" placeholder="70012345"
+                                    class="block w-full rounded-lg border-gray-300 p-2 border">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <button type="submit" id="submit-btn"
+                    class="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white p-4 rounded-xl font-bold text-lg hover:from-blue-700 hover:to-blue-800 shadow-lg transform transition hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2">💾
+                    Guardar Producto</button>
+            </form>
+        </div>
+    </div>
+    <!-- History Modal -->
+    <div id="history-modal"
+        class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-md overflow-hidden max-h-[90vh] flex flex-col">
+            <div class="bg-purple-600 p-4 text-white flex justify-between items-center">
+                <h2 class="text-lg font-bold">📊 Historial</h2>
+                <button
+                    onclick="window.closeHistoryModal ? closeHistoryModal() : document.getElementById('history-modal').classList.add('hidden')"
+                    class="text-white text-xl">✕</button>
+            </div>
+            <div class="p-4 bg-gray-50 border-b">
+                <div class="flex items-center gap-3">
+                    <img id="history-product-img" src="" class="w-16 h-16 rounded-lg object-cover">
+                    <div>
+                        <h3 id="history-product-name" class="font-bold text-gray-800"></h3>
+                        <p id="history-product-type" class="text-sm text-purple-600"></p>
+                    </div>
+                </div>
+            </div>
+            <div class="p-3 bg-white border-b">
+                <button
+                    onclick="window.openAddHistoryEntry ? openAddHistoryEntry() : alert('History module not loaded')"
+                    class="w-full bg-green-500 text-white py-2 px-4 rounded-lg font-medium">+ Nueva Compra</button>
+            </div>
+            <div id="history-list" class="flex-1 overflow-y-auto p-4 space-y-3">
+                <div class="text-center text-gray-400 py-8">Cargando...</div>
+            </div>
+            <div class="p-3 bg-gray-100 border-t">
+                <button
+                    onclick="const prod = window.currentHistoryProduct; window.closeHistoryModal(); if (prod) setTimeout(() => window.app.openEditModal(prod), 100);"
+                    class="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-lg font-medium shadow-md transition">✏️
+                    Editar Producto</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add History Entry Modal -->
+    <div id="add-history-modal"
+        class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div class="bg-green-600 p-4 text-white flex justify-between items-center sticky top-0 z-10">
+                <h2 class="text-lg font-bold">📝 Nueva Compra</h2>
+                <button onclick="closeAddHistoryModal()" class="text-white text-xl">✕</button>
+            </div>
+            <form id="history-form" class="p-4 space-y-4"
+                onsubmit="return (window.saveHistoryEntryHandler ? window.saveHistoryEntryHandler(event) : saveHistoryEntry(event))">
+                <input type="hidden" id="hist-product-type" value="unidades">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Tipo de Producto</label>
+                    <div class="flex rounded-md shadow-sm" role="group">
+                        <button type="button" id="hist-type-unidades" disabled
+                            class="flex-1 px-4 py-2 text-sm font-medium text-gray-900 bg-white border border-gray-200 rounded-l-lg opacity-75 cursor-not-allowed">🔢
+                            Unidades</button>
+                        <button type="button" id="hist-type-paquete" disabled
+                            class="flex-1 px-4 py-2 text-sm font-medium text-gray-900 bg-white border-t border-b border-gray-200 opacity-75 cursor-not-allowed">📦
+                            Paquete</button>
+                        <button type="button" id="hist-type-ambos" disabled
+                            class="flex-1 px-4 py-2 text-sm font-medium text-gray-900 bg-white border border-gray-200 rounded-r-lg opacity-75 cursor-not-allowed">📦+🔢
+                            Ambos</button>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-1">El tipo no puede modificarse en una compra</p>
+                </div>
+                <!-- Units per Package (Hidden by default) -->
+                <div id="hist-units-per-pkg-container" class="hidden bg-blue-50 p-3 rounded-lg border border-blue-200">
+                    <label class="block text-sm font-medium text-blue-800">Unidades por Paquete</label>
+                    <input type="number" id="hist-units-per-package" min="1" value="1" readonly
+                        class="mt-1 block w-full rounded-md border-blue-300 p-2 border bg-gray-100 cursor-not-allowed">
+                    <p class="text-xs text-gray-500 mt-1">Valor actual del producto</p>
+                </div>
+                <!-- Quantity (Simple) -->
+                <div id="hist-quantity-simple-container">
+                    <label id="hist-quantity-label" class="block text-sm font-medium text-gray-700">Stock a Agregar
+                        (Unidades)</label>
+                    <input type="number" id="hist-quantity" required min="1" value="1"
+                        class="mt-1 block w-full rounded-md border-gray-300 p-2 border focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <!-- Quantity (Ambos) -->
+                <div id="hist-quantity-ambos-container"
+                    class="hidden bg-gradient-to-r from-blue-50 to-green-50 p-4 rounded-lg border-2 border-blue-200">
+                    <label class="block text-sm font-bold text-gray-700 mb-3">📦 Stock a Agregar</label>
+                    <div class="grid grid-cols-2 gap-3 mb-3">
+                        <div>
+                            <label class="block text-xs font-medium text-gray-600">📦 Cantidad de Cajas</label>
+                            <input type="number" id="hist-box-quantity" min="0" value="0"
+                                class="mt-1 block w-full rounded-md border-blue-300 p-2 border focus:ring-blue-500 focus:border-blue-500"
+                                oninput="calculateHistTotalStock()">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-600">🔢 Unidades Sueltas</label>
+                            <input type="number" id="hist-loose-units" min="0" value="0"
+                                class="mt-1 block w-full rounded-md border-green-300 p-2 border focus:ring-green-500 focus:border-green-500"
+                                oninput="calculateHistTotalStock()">
+                        </div>
+                    </div>
+                    <div class="bg-white p-3 rounded-lg border border-gray-300">
+                        <span class="text-xs text-gray-500">Stock Total a Agregar:</span>
+                        <span id="hist-total-stock-display" class="text-lg font-bold text-blue-600 ml-2">0
+                            unidades</span>
+                        <p id="hist-stock-display" class="text-xs text-gray-500 mt-1 font-bold"></p>
+                    </div>
+                </div>
+                <!-- Costs & Prices -->
+                <div class="grid grid-cols-2 gap-4">
+                    <div id="hist-cost-pkg-container" class="hidden">
+                        <label class="block text-xs font-medium text-gray-500">Costo Compra (Paquete)</label>
+                        <input type="number" id="hist-price-buy" step="0.01"
+                            class="mt-1 block w-full rounded-md border-gray-300 p-2 border"
+                            oninput="calculateHistCosts()">
+                    </div>
+                    <div id="hist-cost-unit-container" class="hidden">
+                        <label class="block text-xs font-medium text-gray-500">Costo Unitario</label>
+                        <input type="number" id="hist-unit-cost" step="0.01"
+                            class="mt-1 block w-full rounded-md border-gray-300 p-2 border"
+                            oninput="calculateHistCosts()">
+                    </div>
+                    <div id="hist-price-pkg-container" class="hidden">
+                        <label class="block text-xs font-medium text-gray-500">Precio Venta (Paquete)</label>
+                        <input type="number" id="hist-price-sell" step="0.01"
+                            class="mt-1 block w-full rounded-md border-gray-300 p-2 border"
+                            oninput="calculateHistProfit()">
+                    </div>
+                    <div id="hist-price-unit-container" class="hidden">
+                        <label class="block text-xs font-medium text-gray-500">Precio Venta (Unidad)</label>
+                        <input type="number" id="hist-unit-price" step="0.01"
+                            class="mt-1 block w-full rounded-md border-gray-300 p-2 border"
+                            oninput="calculateHistProfit()">
+                    </div>
+                </div>
+                <!-- Profit Display -->
+                <div id="hist-profit-section" class="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">📊 GANANCIA ESTIMADA</label>
+                    <div id="hist-profit-pkg-container"
+                        class="hidden bg-blue-50 rounded-lg p-2 border border-blue-200 mb-2">
+                        <span class="text-xs text-gray-600 block">Por Paquete:</span>
+                        <span id="hist-profit-pkg" class="block text-lg font-bold text-green-700">$0.00</span>
+                    </div>
+                    <div id="hist-profit-unit-container"
+                        class="hidden bg-green-50 rounded-lg p-2 border border-green-200">
+                        <span class="text-xs text-gray-600 block">Por Unidad:</span>
+                        <span id="hist-profit-unit" class="block text-lg font-bold text-green-700">$0.00</span>
+                    </div>
+                </div>
+                <!-- Expiry Date -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">📅 Fecha de Vencimiento</label>
+                    <input type="date" id="hist-expiry-date"
+                        class="mt-1 block w-full rounded-md border-gray-300 p-2 border">
+                </div>
+                <!-- Notes -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Notas (opcional)</label>
+                    <input type="text" id="hist-notes" placeholder="Ej: Proveedor X, promoción..."
+                        class="mt-1 block w-full rounded-md border-gray-300 p-2 border">
+                </div>
+                <!-- Submit Button -->
+                <button type="submit"
+                    class="w-full bg-green-600 text-white p-3 rounded-lg font-bold hover:bg-green-700 shadow-lg transform transition hover:scale-[1.02]">💾
+                    Guardar Compra</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Clear History Modal -->
+    <div id="clear-history-modal"
+        class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-sm p-6">
+            <h3 class="text-xl font-bold text-gray-800 mb-4">🗑️ Limpiar Historial</h3>
+            <p class="text-gray-600 mb-6">Selecciona qué periodo deseas eliminar:</p>
+            <div class="space-y-3">
+                <button onclick="window.reports.clearHistory('day')"
+                    class="w-full bg-blue-100 text-blue-700 py-3 rounded-lg font-bold hover:bg-blue-200 transition">📅
+                    Ventas de HOY</button>
+                <button onclick="window.reports.clearHistory('week')"
+                    class="w-full bg-indigo-100 text-indigo-700 py-3 rounded-lg font-bold hover:bg-indigo-200 transition">📆
+                    Ventas de esta SEMANA</button>
+                <button onclick="window.reports.clearHistory('month')"
+                    class="w-full bg-purple-100 text-purple-700 py-3 rounded-lg font-bold hover:bg-purple-200 transition">🗓️
+                    Ventas de este MES</button>
+                <div class="border-t pt-3 mt-3">
+                    <button onclick="window.reports.clearHistory('all')"
+                        class="w-full bg-red-100 text-red-700 py-3 rounded-lg font-bold hover:bg-red-200 transition">⚠️
+                        ELIMINAR TODO</button>
+                </div>
+            </div>
+            <button onclick="window.reports.closeClearHistoryModal()"
+                class="mt-6 w-full text-gray-500 font-medium hover:text-gray-700">Cancelar</button>
+        </div>
+    </div>
+
+    <!-- Debug Console -->
+    <div id="debug-console"
+        class="fixed bottom-0 left-0 right-0 bg-gray-900 text-white p-4 shadow-lg hidden z-50 max-h-64 overflow-y-auto">
+        <div class="flex justify-between items-center mb-2">
+            <h3 class="font-bold">Debug Console</h3>
+            <button onclick="window.toggleDebugConsole()" class="text-gray-400 hover:text-white">✕</button>
+        </div>
+        <div id="debug-output" class="font-mono text-xs space-y-1"></div>
+        <div class="mt-2 flex gap-2">
+            <button onclick="window.app.resetApp()" class="bg-red-600 px-2 py-1 rounded text-xs">Reset App</button>
+            <button onclick="localStorage.clear(); location.reload()"
+                class="bg-orange-600 px-2 py-1 rounded text-xs">Clear Storage</button>
+        </div>
+    </div>
+
+    <!-- Restock List Modal -->
+    <div id="restock-modal"
+        class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black bg-opacity-50 p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col">
+            <div
+                class="bg-gradient-to-r from-orange-500 to-amber-500 p-4 rounded-t-2xl flex justify-between items-center">
+                <h3 class="text-lg font-bold text-white">🛒 Lista de Reabastecimiento</h3>
+                <button onclick="window.restockList.closeModal()"
+                    class="text-white hover:text-gray-200 text-xl">✕</button>
+            </div>
+            <div id="restock-list-content" class="p-4 overflow-y-auto flex-1">
+                <!-- Content rendered by JS -->
+            </div>
+            <div class="p-4 border-t border-gray-200 flex gap-2">
+                <button onclick="window.restockList.exportToPDF()"
+                    class="flex-1 bg-red-500 hover:bg-red-600 text-white py-2 px-3 rounded-lg font-medium flex items-center justify-center gap-1">📄
+                    PDF</button>
+                <button onclick="window.restockList.shareViaWhatsApp()"
+                    class="flex-1 bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-lg font-medium flex items-center justify-center gap-2">📤
+                    WhatsApp</button>
+                <button onclick="window.restockList.clearManualList()"
+                    class="bg-gray-200 hover:bg-gray-300 text-gray-700 py-2 px-4 rounded-lg font-medium">🧹
+                    Limpiar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="api.js"></script>
+    <script src="offline-db.js"></script>
+    <script src="ui.js"></script>
+    <script src="sync-manager.js"></script>
+    <script src="auth.js"></script>
+    <script src="category-filter.js"></script>
+    <script src="scanner.js"></script>
+    <script src="pdf-export.js"></script>
+    <script src="product-history.js"></script>
+    <script src="sales.js"></script>
+    <script src="reports.js"></script>
+    <script src="restock-list.js"></script>
+    <script src="category-manager.js"></script>
+    <script src="filter-menu.js"></script>
+    <script src="app.js"></script>
+    <script src="theme-loader.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            window.auth.init();
+        });
+    </script>
+</body>
+
+</html>

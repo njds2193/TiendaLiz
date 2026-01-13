@@ -84,6 +84,9 @@ function switchTab(tabName, forceSwitch = false) {
     // Hide filter menu by default
     if (window.filterMenu) window.filterMenu.hide();
 
+    // Hide sales search bar by default
+    if (window.salesSearch) window.salesSearch.hide();
+
     // Reset tab styles
     ['inventario', 'ventas', 'reportes'].forEach(t => {
         const tabEl = document.getElementById('tab-' + t);
@@ -106,6 +109,10 @@ function switchTab(tabName, forceSwitch = false) {
         if (fabBtn) fabBtn.classList.remove('hidden');
     } else if (tabName === 'ventas') {
         if (cartFab) cartFab.classList.remove('hidden');
+        // Show sales search bar
+        if (window.salesSearch) {
+            window.salesSearch.show();
+        }
         if (window.sales) {
             window.sales.loadCategories();
             window.sales.renderProducts();

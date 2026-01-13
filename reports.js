@@ -957,8 +957,17 @@ async function loadReports() {
             let txTotalSale = 0;
             let txTotalProfit = 0;
 
+            // Sort items so Extra/Descuento items appear at the end
+            const sortedItems = [...tx.items].sort((a, b) => {
+                const aIsExtra = a.product_id === 'extra-adjustment';
+                const bIsExtra = b.product_id === 'extra-adjustment';
+                if (aIsExtra && !bIsExtra) return 1;  // a goes after b
+                if (!aIsExtra && bIsExtra) return -1; // a goes before b
+                return 0; // keep original order
+            });
+
             // Render items in transaction
-            tx.items.forEach(item => {
+            sortedItems.forEach(item => {
                 const date = new Date(item.created_at).toLocaleDateString() + ' ' + new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                 const hasExtra = item.notes && item.notes.includes('Extra:');
                 let extraInfo = '';
@@ -982,17 +991,38 @@ async function loadReports() {
                     ? '<span class="inline-flex items-center gap-1 bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded text-[10px] font-bold mt-1">📱 QR</span>'
                     : '<span class="inline-flex items-center gap-1 bg-green-100 text-green-700 px-1.5 py-0.5 rounded text-[10px] font-bold mt-1">💵 Efectivo</span>';
 
+                // Check if this is an Extra/Descuento adjustment
+                const isExtraAdjustment = item.product_id === 'extra-adjustment';
+                const isDiscount = isExtraAdjustment && item.price_sell < 0;
+
+                // Determine colors based on item type
+                let priceColorClass = 'text-green-600';
+                let nameColorClass = 'text-gray-800';
+                let pricePrefix = '+';
+
+                if (isExtraAdjustment) {
+                    if (isDiscount) {
+                        priceColorClass = 'text-red-600';
+                        nameColorClass = 'text-red-600';
+                        pricePrefix = '';
+                    } else {
+                        priceColorClass = 'text-green-600';
+                        nameColorClass = 'text-green-600';
+                        pricePrefix = '+';
+                    }
+                }
+
                 html += `
                     <div class="py-2 px-2 flex justify-between items-center gap-2 ${bgClass} ${paymentBorder} rounded-lg mb-1 shadow-sm">
                         <div class="flex-1 min-w-0">
-                            <p class="font-medium text-sm text-gray-800 truncate">
+                            <p class="font-medium text-sm ${nameColorClass} truncate">
                                 ${item.product_name || item.products?.name || 'Producto eliminado'}
                                 ${hasExtra ? `<span class="text-purple-500 cursor-pointer" onclick="alert('Ajuste aplicado: ${extraInfo}')" title="Clic para ver ajuste">⚠️</span>` : ''}
                             </p>
                             <p class="text-xs text-gray-500">${date}</p>
                         </div>
                         <div class="text-right flex flex-col items-end">
-                            <p class="font-bold text-sm text-green-600">+Bs ${saleTotal.toFixed(2)}</p>
+                            <p class="font-bold text-sm ${priceColorClass}">${pricePrefix}Bs ${saleTotal.toFixed(2)}</p>
                             ${paymentBadge}
                             <p class="text-xs ${profit > 0 ? 'text-orange-500' : 'text-gray-400'} mt-0.5">
                                 ${profit > 0 ? '📈 ' : ''}Bs ${profit.toFixed(2)} gan.

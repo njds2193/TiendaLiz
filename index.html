@@ -202,8 +202,9 @@
         </div>
         <!-- Tab Content: Ventas (FULL SCREEN + FLOATING CART) -->
         <div id="content-ventas" class="flex flex-col max-w-md mx-auto relative" style="height: calc(100vh - 140px);">
-            <!-- Section 1: Categories -->
-            <section id="sales-categories" class="bg-white shadow-sm p-3 border-b-2 border-gray-100 flex-shrink-0">
+            <!-- Section 1: Categories (HIDDEN - replaced by bottom search bar) -->
+            <section id="sales-categories"
+                class="bg-white shadow-sm p-3 border-b-2 border-gray-100 flex-shrink-0 hidden">
                 <div class="flex items-center gap-2 mb-2">
                     <span class="text-gray-600 text-sm font-medium">📁 Categoría:</span>
                 </div>
@@ -213,7 +214,7 @@
             </section>
 
             <!-- Section 2: Products Grid (FULL HEIGHT) -->
-            <section id="sales-products" class="flex-1 overflow-y-auto p-3 pb-24 bg-gray-50">
+            <section id="sales-products" class="flex-1 overflow-y-auto p-3 pb-36 bg-gray-50">
                 <div id="sales-products-grid" class="grid grid-cols-3 gap-3">
                     <div class="col-span-3 text-center text-gray-400 py-8">Cargando productos...</div>
                 </div>
@@ -972,6 +973,8 @@
     <script src="pdf-export.js"></script>
     <script src="product-history.js"></script>
     <script src="sales.js"></script>
+    <script src="cart-tabs.js"></script>
+    <script src="sales-search.js"></script>
     <script src="reports.js"></script>
     <script src="restock-list.js"></script>
     <script src="category-manager.js"></script>

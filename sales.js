@@ -480,6 +480,16 @@ async function confirmCartSale() {
         window.restockList.updateBadge();
     }
 
+    // 6. Refresh inventory display IMMEDIATELY (so stock shows updated quantity)
+    if (window.ui && window.ui.renderProductList) {
+        if (window.appState.activeCategory) {
+            const filtered = window.appState.allProducts.filter(p => p.category === window.appState.activeCategory);
+            window.ui.renderProductList(filtered, 'product-list');
+        } else {
+            window.ui.renderProductList(window.appState.allProducts, 'product-list');
+        }
+    }
+
     // ========== BACKGROUND SYNC: Process server updates without blocking ==========
 
     (async () => {
@@ -502,13 +512,10 @@ async function confirmCartSale() {
 
                 // Build notes
                 let notes = `Venta: ${item.quantity} ${item.isBox ? 'Caja(s)' : 'Unidad(es)'}`;
-                if (extraToProcess !== 0) {
-                    notes += ` | Extra: ${extraToProcess >= 0 ? '+' : ''}Bs ${extraToProcess.toFixed(2)}`;
-                }
 
                 const unitPrice = item.isBox ? (item.price / (product.units_per_package || 1)) : item.price;
 
-                // Save history entry
+                // Save history entry for this product (without extra - extra is saved separately)
                 window.api.saveHistoryEntry({
                     product_id: item.productId,
                     action_type: 'venta',
@@ -524,6 +531,27 @@ async function confirmCartSale() {
                     transaction_id: transactionId
                 }).catch(e => {
                     console.warn('History sync pending:', e.message);
+                });
+            }
+
+            // Save EXTRA as a separate line item if there's any extra amount
+            if (extraToProcess !== 0) {
+                const extraType = extraToProcess > 0 ? 'Recargo' : 'Descuento';
+                window.api.saveHistoryEntry({
+                    product_id: 'extra-adjustment', // Special ID for extra/adjustments
+                    action_type: 'venta',
+                    quantity: 1,
+                    price_sell: extraToProcess, // Can be positive (extra) or negative (discount)
+                    unit_cost: 0,
+                    total_buy: 0,
+                    notes: `${extraType}: ${extraToProcess >= 0 ? '+' : ''}Bs ${extraToProcess.toFixed(2)}`,
+                    payment_method: paymentToProcess,
+                    product_name: extraToProcess > 0 ? '✨ Extra' : '🏷️ Descuento',
+                    product_category: 'Ajustes',
+                    product_image_url: null,
+                    transaction_id: transactionId
+                }).catch(e => {
+                    console.warn('Extra history sync pending:', e.message);
                 });
             }
         } catch (error) {
@@ -619,6 +647,15 @@ function updateExtraDisplay() {
     const extraDisplayEl = document.getElementById('cart-extra-display');
     if (extraDisplayEl) {
         extraDisplayEl.textContent = 'Bs ' + extraAmount.toFixed(2);
+    }
+    // Update the big display in Extra tab
+    const extraBigEl = document.getElementById('extra-amount-display');
+    if (extraBigEl) {
+        extraBigEl.textContent = 'Bs ' + extraAmount.toFixed(2);
+    }
+    // Update cart tabs badge
+    if (window.cartTabs && window.cartTabs.updateExtraBadge) {
+        window.cartTabs.updateExtraBadge(extraAmount);
     }
 }
 

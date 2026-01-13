@@ -348,24 +348,35 @@ async function apiFetchSalesHistory() {
 
 // Delete history entry
 async function apiDeleteHistoryEntry(historyId) {
-    // OFFLINE-FIRST
+    console.log('Deleting history entry:', historyId);
+
+    // Delete from local DB first
     if (hasOfflineDB()) {
-        await window.offlineDB.deleteHistoryEntry(historyId);
-
-        if (canUseCloud() && window.syncManager) {
-            window.syncManager.syncToCloud().catch(console.error);
+        try {
+            await window.offlineDB.deleteHistoryEntry(historyId);
+            console.log(`Deleted history entry ${historyId} locally`);
+        } catch (e) {
+            console.warn('Local delete error:', e);
         }
-
-        return true;
     }
 
+    // ALSO delete from Supabase directly when online (don't just rely on background sync)
     if (canUseCloud()) {
-        const { error } = await supabaseClient
-            .from('product_history')
-            .delete()
-            .eq('id', historyId);
+        try {
+            const { error } = await supabaseClient
+                .from('product_history')
+                .delete()
+                .eq('id', historyId);
 
-        if (error) throw error;
+            if (error) {
+                console.error('Supabase delete error:', error);
+                throw error;
+            }
+            console.log(`✅ Deleted history entry ${historyId} from Supabase`);
+        } catch (e) {
+            console.error('Cloud delete failed:', e);
+            // Still return true since local was deleted - will sync later
+        }
     }
 
     return true;

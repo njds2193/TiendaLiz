@@ -197,29 +197,57 @@ async function apiFetchProductHistory(productId) {
 }
 
 async function apiSaveHistoryEntry(historyData) {
-    // OFFLINE-FIRST
+    let savedEntry = null;
+    let cloudSynced = false;
+    let syncError = null;
+
+    // Generate ID if not provided (needed for both local and cloud)
+    const entryWithId = {
+        ...historyData,
+        id: historyData.id || crypto.randomUUID(),
+        created_at: historyData.created_at || new Date().toISOString()
+    };
+
+    // 1. ALWAYS save to local IndexedDB first (offline-first)
     if (hasOfflineDB()) {
-        const savedEntry = await window.offlineDB.saveHistoryEntry(historyData);
-        console.log(`Saved history entry locally`);
-
-        if (canUseCloud() && window.syncManager) {
-            window.syncManager.syncToCloud().catch(console.error);
-        }
-
-        return savedEntry;
+        savedEntry = await window.offlineDB.saveHistoryEntry(entryWithId);
+        console.log(`Saved history entry locally: ${entryWithId.id}`);
     }
 
-    // Fallback to cloud
+    // 2. If ONLINE, also save DIRECTLY to Supabase (critical for persistence)
     if (canUseCloud()) {
-        const { error } = await supabaseClient
-            .from('product_history')
-            .insert([historyData]);
+        try {
+            // Remove local-only fields before sending to Supabase
+            const { sync_status, updated_at, ...cleanData } = entryWithId;
 
-        if (error) throw error;
-        return true;
+            const { error } = await supabaseClient
+                .from('product_history')
+                .upsert([cleanData], { onConflict: 'id' });
+
+            if (error) {
+                console.error('Direct Supabase save failed:', error);
+                syncError = error;
+            } else {
+                cloudSynced = true;
+                console.log(`✅ History entry synced to Supabase: ${entryWithId.id}`);
+
+                // Mark as synced in local DB
+                if (hasOfflineDB() && window.offlineDB.markAsSynced) {
+                    await window.offlineDB.markAsSynced('product_history', entryWithId.id);
+                }
+            }
+        } catch (err) {
+            console.error('Supabase sync error:', err);
+            syncError = err;
+        }
     }
 
-    throw new Error('No se puede guardar: sin conexión');
+    // Return result with sync status
+    return {
+        entry: savedEntry || entryWithId,
+        synced: cloudSynced,
+        error: syncError
+    };
 }
 
 // --- Sales API (Offline-First) ---
@@ -255,13 +283,43 @@ async function apiUpdateProductStock(productId, newQuantity) {
 // --- Reports API (Offline-First) ---
 
 async function apiFetchSalesHistory() {
-    // OFFLINE-FIRST
-    if (hasOfflineDB()) {
-        const localSales = await window.offlineDB.getSalesHistory();
+    console.log('apiFetchSalesHistory called');
 
-        if (localSales && localSales.length > 0) {
-            // Map local data to expected format
-            return localSales.map(item => ({
+    let cloudData = [];
+    let localData = [];
+
+    // 1. Fetch from Cloud if online
+    if (canUseCloud()) {
+        console.log('Online: Fetching history from Supabase...');
+        const { data, error } = await supabaseClient
+            .from('product_history')
+            .select('*, products(name, category, image_url, quantity)')
+            .eq('action_type', 'venta')
+            .order('created_at', { ascending: false });
+
+        if (!error && data) {
+            cloudData = data.map(item => ({
+                ...item,
+                product_name: item.product_name || item.products?.name || 'Producto eliminado',
+                product_category: item.product_category || item.products?.category || 'Sin categoría',
+                product_image_url: item.product_image_url || item.products?.image_url || null
+            }));
+
+            // Update local DB with fresh cloud data (background)
+            if (hasOfflineDB()) {
+                window.offlineDB.db.product_history.bulkPut(data).catch(e => console.error('Error updating local cache:', e));
+            }
+        } else {
+            console.error('Supabase error:', error);
+        }
+    }
+
+    // 2. Fetch from Local DB
+    if (hasOfflineDB()) {
+        console.log('Fetching local history...');
+        const localRaw = await window.offlineDB.getSalesHistory();
+        if (localRaw && localRaw.length > 0) {
+            localData = localRaw.map(item => ({
                 ...item,
                 product_name: item.product_name || 'Producto',
                 product_category: item.product_category || 'Sin categoría',
@@ -270,25 +328,22 @@ async function apiFetchSalesHistory() {
         }
     }
 
-    // Fallback to cloud
-    if (canUseCloud()) {
-        const { data, error } = await supabaseClient
-            .from('product_history')
-            .select('*, products(name, category, image_url, quantity)')
-            .eq('action_type', 'venta')
-            .order('created_at', { ascending: false });
+    // 3. Merge and Deduplicate (prefer local version if exists, as it might have pending changes)
+    const mergedMap = new Map();
 
-        if (error) throw error;
+    // Add cloud data first
+    cloudData.forEach(item => mergedMap.set(item.id, item));
 
-        return data.map(item => ({
-            ...item,
-            product_name: item.product_name || item.products?.name || 'Producto eliminado',
-            product_category: item.product_category || item.products?.category || 'Sin categoría',
-            product_image_url: item.product_image_url || item.products?.image_url || null
-        }));
-    }
+    // Add local data (overrides cloud if same ID, adds if new)
+    localData.forEach(item => mergedMap.set(item.id, item));
 
-    return [];
+    // Convert back to array and sort
+    const mergedList = Array.from(mergedMap.values()).sort((a, b) => {
+        return new Date(b.created_at) - new Date(a.created_at);
+    });
+
+    console.log(`Merged history: ${mergedList.length} items (Cloud: ${cloudData.length}, Local: ${localData.length})`);
+    return mergedList;
 }
 
 // Delete history entry

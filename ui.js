@@ -2,19 +2,68 @@
 
 // --- TOAST ---
 function showToast(message, type = 'success') {
+    let background;
+
+    switch (type) {
+        case 'success':
+            background = 'linear-gradient(to right, #00b09b, #96c93d)';
+            break;
+        case 'warning':
+            background = 'linear-gradient(to right, #f7971e, #ffd200)';
+            break;
+        case 'error':
+        default:
+            background = 'linear-gradient(to right, #ff5f6d, #ffc371)';
+            break;
+    }
+
     Toastify({
         text: message,
         duration: 3000,
         gravity: "top",
         position: "center",
-        style: {
-            background: type === 'success' ? 'linear-gradient(to right, #00b09b, #96c93d)' : 'linear-gradient(to right, #ff5f6d, #ffc371)'
-        }
+        style: { background }
     }).showToast();
 }
 
 // --- TAB SWITCHING ---
-function switchTab(tabName) {
+// List of modal IDs that should be checked before switching tabs
+const modalIds = [
+    'product-modal',
+    'history-modal',
+    'add-history-modal',
+    'clear-history-modal',
+    'sale-modal',
+    'qr-modal',
+    'batch-modal',
+    'category-manager-modal',
+    'restock-modal'
+];
+
+function hasOpenModals() {
+    return modalIds.some(id => {
+        const modal = document.getElementById(id);
+        return modal && !modal.classList.contains('hidden');
+    });
+}
+
+function closeAllModals() {
+    modalIds.forEach(id => {
+        const modal = document.getElementById(id);
+        if (modal) modal.classList.add('hidden');
+    });
+}
+
+function switchTab(tabName, forceSwitch = false) {
+    // Check if there are open modals
+    if (!forceSwitch && hasOpenModals()) {
+        if (confirm('¿Deseas cerrar la ventana abierta y cambiar de sección?')) {
+            closeAllModals();
+        } else {
+            return false; // Don't switch if user cancels
+        }
+    }
+
     window.appState.currentTab = tabName;
 
     // Hide all content
@@ -143,9 +192,17 @@ function renderProductList(products, containerId = 'product-list') {
             '</div>' +
             '</div>' +
             '<div class="flex border-t border-gray-100 divide-x divide-gray-100">' +
-            '<button onclick="event.stopPropagation(); window.restockList && window.restockList.addToList(\'' + p.id + '\')" class="py-2 px-3 text-orange-500 font-medium text-sm hover:bg-orange-50 flex items-center justify-center" title="Agregar a lista de reabastecimiento">' +
-            '📋' +
-            '</button>' +
+            (() => {
+                const isInRestock = window.restockList && window.restockList.isInList && window.restockList.isInList(p.id);
+                const btnClass = isInRestock
+                    ? 'text-green-500 bg-green-50 border border-green-200'
+                    : 'text-orange-500 hover:bg-orange-50';
+                const btnIcon = isInRestock ? '✅' : '📋';
+
+                return '<button id="btn-restock-' + p.id + '" onclick="event.stopPropagation(); window.restockList && window.restockList.toggleProduct(\'' + p.id + '\')" class="py-2 px-3 font-medium text-sm flex items-center justify-center ' + btnClass + '" title="Alternar en lista de reabastecimiento">' +
+                    btnIcon +
+                    '</button>';
+            })() +
             '<button onclick="event.stopPropagation(); window.app.openEditModal(window.appState.allProducts.find(x => x.id === \'' + p.id + '\'))" class="flex-1 py-2 text-blue-600 font-medium text-sm hover:bg-blue-50 flex items-center justify-center gap-1">' +
             '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg> Editar' +
             '</button>' +
@@ -163,7 +220,9 @@ window.ui = {
     switchTab,
     openModal,
     closeModal,
-    renderProductList
+    renderProductList,
+    hasOpenModals,
+    closeAllModals
 };
 
 // Expose switchTab globally for HTML onclick

@@ -29,6 +29,23 @@ const restockList = (() => {
         updateBadge();
     }
 
+    // Check if product is in manual list
+    function isInList(productId) {
+        const list = getManualList();
+        return list.some(item => item.productId === productId);
+    }
+
+    // Toggle product in manual list
+    function toggleProduct(productId) {
+        if (isInList(productId)) {
+            removeFromList(productId);
+            return false; // Removed
+        } else {
+            addToList(productId);
+            return true; // Added
+        }
+    }
+
     // Add product to manual restock list
     function addToList(productId, note = '') {
         const products = window.appState?.allProducts || [];
@@ -53,6 +70,7 @@ const restockList = (() => {
         });
 
         saveManualList(list);
+        updateProductButton(productId, true); // Update UI
         return true;
     }
 
@@ -61,11 +79,32 @@ const restockList = (() => {
         let list = getManualList();
         list = list.filter(item => item.productId !== productId);
         saveManualList(list);
+        updateProductButton(productId, false); // Update UI
         renderRestockModal();
+    }
+
+    // Update the button style in the product list
+    function updateProductButton(productId, isAdded) {
+        const btn = document.getElementById(`btn-restock-${productId}`);
+        if (!btn) return;
+
+        if (isAdded) {
+            btn.classList.remove('text-orange-500', 'hover:bg-orange-50');
+            btn.classList.add('text-green-500', 'bg-green-50', 'border', 'border-green-200');
+            btn.innerHTML = '✅'; // Optional: change icon
+        } else {
+            btn.classList.add('text-orange-500', 'hover:bg-orange-50');
+            btn.classList.remove('text-green-500', 'bg-green-50', 'border', 'border-green-200');
+            btn.innerHTML = '📋';
+        }
     }
 
     // Clear manual list
     function clearManualList() {
+        // Reset all buttons first
+        const list = getManualList();
+        list.forEach(item => updateProductButton(item.productId, false));
+
         saveManualList([]);
         renderRestockModal();
     }
@@ -401,6 +440,8 @@ const restockList = (() => {
     return {
         getLowStockProducts,
         getManualList,
+        isInList,
+        toggleProduct,
         addToList,
         removeFromList,
         clearManualList,

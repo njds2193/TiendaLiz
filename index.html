@@ -1,11 +1,11 @@
-﻿﻿<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TiendaLIZ</title>
-    <link rel="manifest" href="manifest.json">
+    <link rel="manifest" href="./manifest.json">
     <link rel="icon" type="image/x-icon" href="./favicon.ico">
     <meta name="theme-color" content="#C2714F">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -18,6 +18,7 @@
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://unpkg.com/dexie@latest/dist/dexie.js"></script>
@@ -122,6 +123,28 @@
                         <span id="restock-badge"
                             class="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center hidden">0</span>
                     </button>
+                    <!-- Expiry Products Button -->
+                    <button onclick="window.openExpiryModal()" class="text-white/80 hover:text-white relative"
+                        title="Productos por Vencer">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        <span id="expiry-badge"
+                            class="absolute -top-1 -right-1 bg-orange-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center hidden">0</span>
+                    </button>
+
+                    <!-- Category Manager Button -->
+                    <button onclick="window.categoryManager.open()" class="text-white/80 hover:text-white"
+                        title="Gestionar Categorías">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                        </svg>
+                    </button>
+
                     <button onclick="window.auth.logout()" class="text-white/80 hover:text-white">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor">
@@ -134,11 +157,11 @@
             <!-- Tabs -->
             <div class="flex mt-4 bg-blue-700/50 rounded-xl p-1 max-w-md mx-auto">
                 <button onclick="window.ui.switchTab('inventario')" id="tab-inventario"
-                    class="flex-1 py-2 rounded-lg text-sm font-bold transition-all bg-white text-blue-600 shadow-sm">
+                    class="flex-1 py-2 rounded-lg text-sm font-bold transition-all text-blue-100 hover:bg-white/10">
                     📦 Inventario
                 </button>
                 <button onclick="window.ui.switchTab('ventas')" id="tab-ventas"
-                    class="flex-1 py-2 rounded-lg text-sm font-bold transition-all text-blue-100 hover:bg-white/10">
+                    class="flex-1 py-2 rounded-lg text-sm font-bold transition-all bg-white text-blue-600 shadow-sm">
                     💰 Ventas
                 </button>
                 <button onclick="window.ui.switchTab('reportes')" id="tab-reportes"
@@ -172,20 +195,19 @@
         </section>
 
         <!-- Tab Content: Inventario -->
-        <div id="content-inventario">
+        <div id="content-inventario" class="hidden">
             <main id="product-list" class="p-4 space-y-4 max-w-md mx-auto pb-24">
                 <div class="text-center text-gray-500 mt-10">Cargando productos...</div>
             </main>
         </div>
         <!-- Tab Content: Ventas (FULL SCREEN + FLOATING CART) -->
-        <div id="content-ventas" class="hidden flex flex-col max-w-md mx-auto relative"
-            style="height: calc(100vh - 140px);">
+        <div id="content-ventas" class="flex flex-col max-w-md mx-auto relative" style="height: calc(100vh - 140px);">
             <!-- Section 1: Categories -->
             <section id="sales-categories" class="bg-white shadow-sm p-3 border-b-2 border-gray-100 flex-shrink-0">
                 <div class="flex items-center gap-2 mb-2">
                     <span class="text-gray-600 text-sm font-medium">📁 Categoría:</span>
                 </div>
-                <div id="sales-category-buttons" class="flex gap-2 overflow-x-auto pb-2">
+                <div id="sales-category-buttons" class="flex flex-wrap gap-2 pb-2">
                     <!-- Populated by sales.js -->
                 </div>
             </section>
@@ -293,6 +315,21 @@
                                 <span class="font-bold">📢 CAMBIO:</span>
                                 <span id="change-amount" class="text-2xl font-bold text-yellow-300">Bs 0.00</span>
                             </div>
+                        </div>
+                    </div>
+                    <!-- Payment Method Selector -->
+                    <div class="mb-3">
+                        <p class="text-white text-xs mb-1.5 font-medium">💳 Método de Pago:</p>
+                        <div class="flex gap-2">
+                            <button type="button" id="pay-method-cash" onclick="window.sales.setPaymentMethod('cash')"
+                                class="flex-1 py-2 px-3 rounded-xl font-bold text-sm transition-all bg-white text-green-600 shadow-md">
+                                💵 Efectivo
+                            </button>
+                            <button type="button" id="pay-method-digital"
+                                onclick="window.sales.setPaymentMethod('digital')"
+                                class="flex-1 py-2 px-3 rounded-xl font-bold text-sm transition-all bg-white/20 text-white">
+                                📱 QR
+                            </button>
                         </div>
                     </div>
                     <div class="flex gap-3">
@@ -454,210 +491,230 @@
     <!-- Product Modal -->
     <div id="product-modal"
         class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden max-h-[90vh] overflow-y-auto">
-            <div class="p-4 text-white flex justify-between items-center sticky top-0 z-10"
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[85vh] flex flex-col overflow-hidden">
+            <div class="p-4 text-white flex justify-between items-center flex-shrink-0"
                 style="background: linear-gradient(to right, #C2714F, #A85D3F);">
                 <h2 id="modal-title" class="text-lg font-bold flex items-center gap-2">📦 Nuevo Producto</h2>
                 <button onclick="window.ui.closeModal('product-modal')"
                     class="text-white text-2xl hover:bg-white/20 rounded-full w-8 h-8 flex items-center justify-center transition-all">✕</button>
             </div>
-            <form id="product-form" class="p-4 space-y-4">
-                <input type="hidden" id="product-id">
-                <input type="hidden" id="existing-image-url">
-                <input type="hidden" id="existing-qr-url">
-                <!-- Image Upload -->
-                <div class="relative">
-                    <div id="image-preview"
-                        class="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center cursor-pointer hover:bg-gray-50 hover:border-blue-400 transition-all"
-                        onclick="document.getElementById('product-image').click()">
-                        <span class="text-4xl block mb-2">📷</span>
-                        <span class="text-gray-400 text-sm">Toca para subir imagen</span>
-                    </div>
-                    <img id="preview-img" src="" class="w-full h-48 object-cover rounded-xl hidden mt-2 shadow-lg">
-                    <input type="file" id="product-image" accept="image/*" class="hidden">
-                </div>
-                <!-- SECTION: Basic Info -->
-                <div class="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4 border border-gray-200">
-                    <h3 class="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">🏷️ INFORMACIÓN BÁSICA</h3>
-                    <div class="space-y-3">
-                        <div>
-                            <label class="block text-xs font-medium text-gray-500 mb-1">Nombre del Producto</label>
-                            <input type="text" id="name" required placeholder="Ej: Coca Cola 2L"
-                                class="block w-full rounded-lg border-gray-300 p-3 border focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all">
+            <form id="product-form" class="flex flex-col flex-1 overflow-hidden">
+                <div class="flex-1 overflow-y-auto p-4 space-y-4">
+                    <input type="hidden" id="product-id">
+                    <input type="hidden" id="existing-image-url">
+                    <input type="hidden" id="existing-qr-url">
+                    <!-- Image Upload -->
+                    <div class="relative">
+                        <div id="image-preview"
+                            class="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center cursor-pointer hover:bg-gray-50 hover:border-blue-400 transition-all"
+                            onclick="document.getElementById('product-image').click()">
+                            <span class="text-4xl block mb-2">📷</span>
+                            <span class="text-gray-400 text-sm">Toca para subir imagen</span>
                         </div>
-                        <div class="relative">
-                            <label class="block text-xs font-medium text-gray-500 mb-1">Categoría</label>
-                            <input type="text" id="category" required placeholder="Ej: bebidas"
-                                class="block w-full rounded-lg border-gray-300 p-3 border focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                                autocomplete="off">
-                            <div id="category-suggestions"
-                                class="absolute z-10 w-full bg-white border border-gray-300 rounded-lg shadow-lg hidden max-h-40 overflow-y-auto">
+                        <img id="preview-img" src="" class="w-full h-48 object-cover rounded-xl hidden mt-2 shadow-lg">
+                        <input type="file" id="product-image" accept="image/*" class="hidden">
+                    </div>
+                    <!-- SECTION: Basic Info -->
+                    <div class="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4 border border-gray-200">
+                        <h3 class="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">🏷️ INFORMACIÓN BÁSICA
+                        </h3>
+                        <div class="space-y-3">
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 mb-1">Nombre del Producto</label>
+                                <input type="text" id="name" required placeholder="Ej: Coca Cola 2L"
+                                    class="block w-full rounded-lg border-gray-300 p-3 border focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all">
+                            </div>
+                            <div class="relative">
+                                <label class="block text-xs font-medium text-gray-500 mb-1">Categoría</label>
+                                <input type="text" id="category" required placeholder="Ej: bebidas"
+                                    class="block w-full rounded-lg border-gray-300 p-3 border focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                                    autocomplete="off">
+                                <div id="category-suggestions"
+                                    class="absolute z-10 w-full bg-white border border-gray-300 rounded-lg shadow-lg hidden max-h-40 overflow-y-auto">
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-                <!-- SECTION: Product Type -->
-                <div class="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
-                    <h3 class="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">📦 TIPO DE PRODUCTO</h3>
-                    <div class="flex rounded-xl overflow-hidden shadow-sm border border-gray-200" role="group">
-                        <input type="hidden" id="product-type" value="unidades">
-                        <button type="button" id="type-unidades" onclick="window.app.setProductType('unidades')"
-                            class="flex-1 px-3 py-3 text-sm font-bold text-gray-900 bg-white hover:bg-blue-50 transition-all flex flex-col items-center gap-1"><span
-                                class="text-lg">🔢</span><span>Unidades</span></button>
-                        <button type="button" id="type-paquete" onclick="window.app.setProductType('paquete')"
-                            class="flex-1 px-3 py-3 text-sm font-bold text-gray-900 bg-white border-l border-r border-gray-200 hover:bg-blue-50 transition-all flex flex-col items-center gap-1"><span
-                                class="text-lg">📦</span><span>Paquete</span></button>
-                        <button type="button" id="type-ambos" onclick="window.app.setProductType('ambos')"
-                            class="flex-1 px-3 py-3 text-sm font-bold text-gray-900 bg-white hover:bg-blue-50 transition-all flex flex-col items-center gap-1"><span
-                                class="text-lg">📦+🔢</span><span>Ambos</span></button>
-                    </div>
-                </div>
-                <!-- Stock Control Options -->
-                <div class="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl p-4 border border-orange-200">
-                    <h3 class="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">⚙️ CONTROL DE INVENTARIO
-                    </h3>
-                    <label
-                        class="flex items-center justify-between cursor-pointer bg-white p-3 rounded-lg border border-orange-200 mb-3">
-                        <span class="flex items-center gap-2"><span class="text-lg">📊</span>
-                            <div><span class="text-sm font-medium text-gray-700">Controlar stock</span>
-                                <p class="text-xs text-gray-400">Reducir cantidad al vender</p>
-                            </div>
-                        </span>
-                        <div class="relative"><input type="checkbox" id="track-stock" class="sr-only peer" checked>
-                            <div
-                                class="w-11 h-6 bg-gray-300 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-orange-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500">
-                            </div>
-                        </div>
-                    </label>
-                    <div class="bg-white p-3 rounded-lg border border-orange-200">
-                        <label class="block text-xs font-bold text-orange-700 mb-1">⚠️ Stock Mínimo (alerta)</label>
-                        <input type="number" id="min-stock" min="0" value="0"
-                            class="block w-full rounded-lg border-orange-200 p-2 border text-center text-lg font-bold focus:ring-2 focus:ring-orange-400">
-                        <p class="text-xs text-gray-400 text-center mt-1">Alerta cuando baje de este valor (0=sin
-                            alerta)</p>
-                    </div>
-                </div>
-                <!-- Units per Package -->
-                <div id="units-per-pkg-container" class="hidden mt-3 bg-white p-3 rounded-lg border border-blue-300">
-                    <label class="block text-xs font-bold text-blue-700 mb-1">📊 Unidades por Paquete</label>
-                    <input type="number" id="units-per-package" min="1" value="1"
-                        class="block w-full rounded-lg border-blue-300 p-3 border text-center text-lg font-bold focus:ring-2 focus:ring-blue-500"
-                        oninput="window.app.calculateCosts()">
-                    <p class="text-xs text-gray-400 text-center mt-1">¿Cuántas unidades contiene cada paquete?</p>
-                </div>
-                <!-- SECTION: Inventory -->
-                <div class="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4 border border-green-200">
-                    <h3 class="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">📈 INVENTARIO</h3>
-                    <div id="quantity-simple-container">
-                        <label id="quantity-label" class="block text-xs font-medium text-gray-500 mb-1">Stock
-                            (Unidades)</label>
-                        <input type="number" id="quantity" required min="0" placeholder="0"
-                            class="block w-full rounded-lg border-gray-300 p-3 border text-center text-xl font-bold focus:ring-2 focus:ring-green-500 focus:border-green-500">
-                    </div>
-                    <div id="quantity-ambos-container" class="hidden space-y-3">
-                        <label class="block text-xs font-bold text-gray-600 mb-2">📦 Stock Inicial</label>
-                        <div class="grid grid-cols-2 gap-3">
-                            <div class="bg-white p-3 rounded-lg border border-blue-200">
-                                <label class="block text-xs font-medium text-blue-600 mb-1">📦 Cajas</label>
-                                <input type="number" id="box-quantity" min="0" value="0"
-                                    class="block w-full rounded-lg border-blue-200 p-2 border text-center text-lg font-bold"
-                                    oninput="window.app.calculateTotalStock()">
-                            </div>
-                            <div class="bg-white p-3 rounded-lg border border-green-200">
-                                <label class="block text-xs font-medium text-green-600 mb-1">🔢 Sueltas</label>
-                                <input type="number" id="loose-units" min="0" value="0"
-                                    class="block w-full rounded-lg border-green-200 p-2 border text-center text-lg font-bold"
-                                    oninput="window.app.calculateTotalStock()">
-                            </div>
-                        </div>
-                        <div class="bg-white p-3 rounded-lg border border-gray-300 text-center">
-                            <span class="text-xs text-gray-500">Stock Total:</span>
-                            <span id="total-stock-display" class="text-xl font-bold text-blue-600 ml-2">0
-                                unidades</span>
-                            <p id="stock-display" class="text-xs text-gray-400 mt-1"></p>
+                    <!-- SECTION: Product Type -->
+                    <div class="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
+                        <h3 class="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">📦 TIPO DE PRODUCTO
+                        </h3>
+                        <div class="flex rounded-xl overflow-hidden shadow-sm border border-gray-200" role="group">
+                            <input type="hidden" id="product-type" value="unidades">
+                            <button type="button" id="type-unidades" onclick="window.app.setProductType('unidades')"
+                                class="flex-1 px-3 py-3 text-sm font-bold text-gray-900 bg-white hover:bg-blue-50 transition-all flex flex-col items-center gap-1"><span
+                                    class="text-lg">🔢</span><span>Unidades</span></button>
+                            <button type="button" id="type-paquete" onclick="window.app.setProductType('paquete')"
+                                class="flex-1 px-3 py-3 text-sm font-bold text-gray-900 bg-white border-l border-r border-gray-200 hover:bg-blue-50 transition-all flex flex-col items-center gap-1"><span
+                                    class="text-lg">📦</span><span>Paquete</span></button>
+                            <button type="button" id="type-ambos" onclick="window.app.setProductType('ambos')"
+                                class="flex-1 px-3 py-3 text-sm font-bold text-gray-900 bg-white hover:bg-blue-50 transition-all flex flex-col items-center gap-1"><span
+                                    class="text-lg">📦+🔢</span><span>Ambos</span></button>
                         </div>
                     </div>
-                </div>
-                <!-- Costs & Prices -->
-                <div class="grid grid-cols-2 gap-4">
-                    <div id="cost-pkg-container" class="hidden">
-                        <label class="block text-xs font-medium text-gray-500">Costo Compra (Paquete)</label>
-                        <input type="number" id="price-buy" step="0.01"
-                            class="mt-1 block w-full rounded-md border-gray-300 p-2 border"
+                    <!-- Stock Control Options -->
+                    <div class="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl p-4 border border-orange-200">
+                        <h3 class="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">⚙️ CONTROL DE
+                            INVENTARIO
+                        </h3>
+                        <label
+                            class="flex items-center justify-between cursor-pointer bg-white p-3 rounded-lg border border-orange-200 mb-3">
+                            <span class="flex items-center gap-2"><span class="text-lg">📊</span>
+                                <div><span class="text-sm font-medium text-gray-700">Controlar stock</span>
+                                    <p class="text-xs text-gray-400">Reducir cantidad al vender</p>
+                                </div>
+                            </span>
+                            <div class="relative"><input type="checkbox" id="track-stock" class="sr-only peer" checked>
+                                <div
+                                    class="w-11 h-6 bg-gray-300 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-orange-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500">
+                                </div>
+                            </div>
+                        </label>
+                        <div class="bg-white p-3 rounded-lg border border-orange-200">
+                            <label class="block text-xs font-bold text-orange-700 mb-1">⚠️ Stock Mínimo (alerta)</label>
+                            <input type="number" id="min-stock" min="0" value="0"
+                                class="block w-full rounded-lg border-orange-200 p-2 border text-center text-lg font-bold focus:ring-2 focus:ring-orange-400">
+                            <p class="text-xs text-gray-400 text-center mt-1">Alerta cuando baje de este valor (0=sin
+                                alerta)</p>
+                        </div>
+                    </div>
+                    <!-- Units per Package -->
+                    <div id="units-per-pkg-container"
+                        class="hidden mt-3 bg-white p-3 rounded-lg border border-blue-300">
+                        <label class="block text-xs font-bold text-blue-700 mb-1">📊 Unidades por Paquete</label>
+                        <input type="number" id="units-per-package" min="1" value="1"
+                            class="block w-full rounded-lg border-blue-300 p-3 border text-center text-lg font-bold focus:ring-2 focus:ring-blue-500"
                             oninput="window.app.calculateCosts()">
+                        <p class="text-xs text-gray-400 text-center mt-1">¿Cuántas unidades contiene cada paquete?</p>
                     </div>
-                    <div id="price-pkg-container" class="hidden">
-                        <label class="block text-xs font-medium text-gray-500">Precio Venta (Paquete)</label>
-                        <input type="number" id="price-sell" step="0.01"
-                            class="mt-1 block w-full rounded-md border-gray-300 p-2 border"
-                            oninput="window.app.calculateProfit()">
+                    <!-- SECTION: Inventory -->
+                    <div class="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4 border border-green-200">
+                        <h3 class="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">📈 INVENTARIO</h3>
+                        <div id="quantity-simple-container">
+                            <label id="quantity-label" class="block text-xs font-medium text-gray-500 mb-1">Stock
+                                (Unidades)</label>
+                            <input type="number" id="quantity" required min="0" placeholder="0"
+                                class="block w-full rounded-lg border-gray-300 p-3 border text-center text-xl font-bold focus:ring-2 focus:ring-green-500 focus:border-green-500">
+                        </div>
+                        <div id="quantity-ambos-container" class="hidden space-y-3">
+                            <label class="block text-xs font-bold text-gray-600 mb-2">📦 Stock Inicial</label>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div class="bg-white p-3 rounded-lg border border-blue-200">
+                                    <label class="block text-xs font-medium text-blue-600 mb-1">📦 Cajas</label>
+                                    <input type="number" id="box-quantity" min="0" value="0"
+                                        class="block w-full rounded-lg border-blue-200 p-2 border text-center text-lg font-bold"
+                                        oninput="window.app.calculateTotalStock()">
+                                </div>
+                                <div class="bg-white p-3 rounded-lg border border-green-200">
+                                    <label class="block text-xs font-medium text-green-600 mb-1">🔢 Sueltas</label>
+                                    <input type="number" id="loose-units" min="0" value="0"
+                                        class="block w-full rounded-lg border-green-200 p-2 border text-center text-lg font-bold"
+                                        oninput="window.app.calculateTotalStock()">
+                                </div>
+                            </div>
+                            <div class="bg-white p-3 rounded-lg border border-gray-300 text-center">
+                                <span class="text-xs text-gray-500">Stock Total:</span>
+                                <span id="total-stock-display" class="text-xl font-bold text-blue-600 ml-2">0
+                                    unidades</span>
+                                <p id="stock-display" class="text-xs text-gray-400 mt-1"></p>
+                            </div>
+                        </div>
                     </div>
-                    <div>
-                        <label class="block text-xs font-medium text-gray-500">Costo Unitario</label>
-                        <input type="number" id="unit-cost" step="0.01"
-                            class="mt-1 block w-full rounded-md border-gray-300 p-2 border"
-                            oninput="window.app.calculateCosts(true)">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium text-gray-500">Precio Venta (Unidad)</label>
-                        <input type="number" id="unit-price" step="0.01"
-                            class="mt-1 block w-full rounded-md border-gray-300 p-2 border"
-                            oninput="window.app.calculateProfit()">
-                    </div>
-                </div>
-                <!-- Profit Display -->
-                <div class="bg-gray-50 p-3 rounded-lg border border-gray-200">
-                    <label class="block text-xs font-bold text-gray-500 mb-2">GANANCIA ESTIMADA</label>
-                    <div id="profit-pkg-container" class="hidden mb-2">
-                        <span class="text-xs text-gray-400">Por Paquete:</span>
-                        <span id="profit-pkg" class="font-bold text-gray-800">$0.00</span>
-                    </div>
-                    <div id="profit-unit-container">
-                        <span class="text-xs text-gray-400">Por Unidad:</span>
-                        <span id="profit-unit" class="font-bold text-gray-800">$0.00</span>
-                    </div>
-                </div>
-                <!-- SECTION: Additional Info -->
-                <div class="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-4 border border-purple-200">
-                    <h3 class="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">📋 INFORMACIÓN ADICIONAL
-                    </h3>
-                    <div class="space-y-3">
+                    <!-- Costs & Prices -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div id="cost-pkg-container" class="hidden">
+                            <label class="block text-xs font-medium text-gray-500">Costo Compra (Paquete)</label>
+                            <input type="number" id="price-buy" step="0.01"
+                                class="mt-1 block w-full rounded-md border-gray-300 p-2 border"
+                                oninput="window.app.calculateCosts()">
+                        </div>
+                        <div id="price-pkg-container" class="hidden">
+                            <label class="block text-xs font-medium text-gray-500">Precio Venta (Paquete)</label>
+                            <input type="number" id="price-sell" step="0.01"
+                                class="mt-1 block w-full rounded-md border-gray-300 p-2 border"
+                                oninput="window.app.calculateProfit()">
+                        </div>
                         <div>
-                            <label class="block text-xs font-medium text-gray-500 mb-1">📅 Fecha de Vencimiento</label>
-                            <input type="date" id="expiry-date"
-                                class="block w-full rounded-lg border-gray-300 p-3 border focus:ring-2 focus:ring-purple-500">
+                            <label class="block text-xs font-medium text-gray-500">Costo Unitario</label>
+                            <input type="number" id="unit-cost" step="0.01"
+                                class="mt-1 block w-full rounded-md border-gray-300 p-2 border"
+                                oninput="window.app.calculateCosts(true)">
                         </div>
-                        <div class="grid grid-cols-2 gap-3">
-                            <div>
-                                <label class="block text-xs font-medium text-gray-500 mb-1">🔖 Código Prov.</label>
-                                <input type="text" id="supplier-code" placeholder="ABC123"
-                                    class="block w-full rounded-lg border-gray-300 p-2 border">
+                        <div>
+                            <label class="block text-xs font-medium text-gray-500">Precio Venta (Unidad)</label>
+                            <input type="number" id="unit-price" step="0.01"
+                                class="mt-1 block w-full rounded-md border-gray-300 p-2 border"
+                                oninput="window.app.calculateProfit()">
+                        </div>
+                    </div>
+                    <!-- Profit Display -->
+                    <div class="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                        <label class="block text-xs font-bold text-gray-500 mb-2">GANANCIA ESTIMADA</label>
+                        <div id="profit-pkg-container" class="hidden mb-2">
+                            <span class="text-xs text-gray-400">Por Paquete:</span>
+                            <span id="profit-pkg" class="font-bold text-gray-800">$0.00</span>
+                        </div>
+                        <div id="profit-unit-container">
+                            <span class="text-xs text-gray-400">Por Unidad:</span>
+                            <span id="profit-unit" class="font-bold text-gray-800">$0.00</span>
+                        </div>
+                    </div>
+                    <!-- SECTION: Additional Info -->
+                    <div class="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-4 border border-purple-200">
+                        <h3 class="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">📋 INFORMACIÓN
+                            ADICIONAL
+                        </h3>
+                        <div class="space-y-3">
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-500 mb-1">📅 Fecha de
+                                        Vencimiento</label>
+                                    <input type="date" id="expiry-date"
+                                        class="block w-full rounded-lg border-gray-300 p-3 border focus:ring-2 focus:ring-purple-500">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-500 mb-1">⏰ Días Adv.</label>
+                                    <input type="number" id="expiry-warning-days" min="1" max="90" value="7"
+                                        placeholder="7"
+                                        class="block w-full rounded-lg border-gray-300 p-3 border focus:ring-2 focus:ring-orange-500">
+                                </div>
                             </div>
-                            <div>
-                                <label class="block text-xs font-medium text-gray-500 mb-1">📞 Teléfono Prov.</label>
-                                <input type="tel" id="supplier-phone" placeholder="70012345"
-                                    class="block w-full rounded-lg border-gray-300 p-2 border">
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-500 mb-1">🔖 Código Prov.</label>
+                                    <input type="text" id="supplier-code" placeholder="ABC123"
+                                        class="block w-full rounded-lg border-gray-300 p-2 border">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-500 mb-1">📞 Teléfono
+                                        Prov.</label>
+                                    <input type="tel" id="supplier-phone" placeholder="70012345"
+                                        class="block w-full rounded-lg border-gray-300 p-2 border">
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
-                <button type="submit" id="submit-btn"
-                    class="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white p-4 rounded-xl font-bold text-lg hover:from-blue-700 hover:to-blue-800 shadow-lg transform transition hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2">💾
-                    Guardar Producto</button>
+                <!-- Sticky Submit Button -->
+                <div class="flex-shrink-0 p-4 bg-white border-t border-gray-200">
+                    <button type="submit" id="submit-btn"
+                        class="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white p-4 rounded-xl font-bold text-lg hover:from-blue-700 hover:to-blue-800 shadow-lg flex items-center justify-center gap-2">💾
+                        Guardar Producto</button>
+                </div>
             </form>
         </div>
     </div>
     <!-- History Modal -->
     <div id="history-modal"
         class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-lg shadow-xl w-full max-w-md overflow-hidden max-h-[90vh] flex flex-col">
-            <div class="bg-purple-600 p-4 text-white flex justify-between items-center">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-md overflow-hidden max-h-[80vh] flex flex-col">
+            <div class="bg-purple-600 p-4 text-white flex justify-between items-center flex-shrink-0">
                 <h2 class="text-lg font-bold">📊 Historial</h2>
                 <button
                     onclick="window.closeHistoryModal ? closeHistoryModal() : document.getElementById('history-modal').classList.add('hidden')"
                     class="text-white text-xl">✕</button>
             </div>
-            <div class="p-4 bg-gray-50 border-b">
+            <div class="p-4 bg-gray-50 border-b flex-shrink-0">
                 <div class="flex items-center gap-3">
                     <img id="history-product-img" src="" class="w-16 h-16 rounded-lg object-cover">
                     <div>
@@ -666,7 +723,7 @@
                     </div>
                 </div>
             </div>
-            <div class="p-3 bg-white border-b">
+            <div class="p-3 bg-white border-b flex-shrink-0">
                 <button
                     onclick="window.openAddHistoryEntry ? openAddHistoryEntry() : alert('History module not loaded')"
                     class="w-full bg-green-500 text-white py-2 px-4 rounded-lg font-medium">+ Nueva Compra</button>
@@ -674,7 +731,7 @@
             <div id="history-list" class="flex-1 overflow-y-auto p-4 space-y-3">
                 <div class="text-center text-gray-400 py-8">Cargando...</div>
             </div>
-            <div class="p-3 bg-gray-100 border-t">
+            <div class="p-3 bg-gray-100 border-t flex-shrink-0">
                 <button
                     onclick="const prod = window.currentHistoryProduct; window.closeHistoryModal(); if (prod) setTimeout(() => window.app.openEditModal(prod), 100);"
                     class="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-lg font-medium shadow-md transition">✏️
@@ -686,125 +743,130 @@
     <!-- Add History Entry Modal -->
     <div id="add-history-modal"
         class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-lg shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
-            <div class="bg-green-600 p-4 text-white flex justify-between items-center sticky top-0 z-10">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-md max-h-[85vh] flex flex-col overflow-hidden">
+            <div class="bg-green-600 p-4 text-white flex justify-between items-center flex-shrink-0">
                 <h2 class="text-lg font-bold">📝 Nueva Compra</h2>
                 <button onclick="closeAddHistoryModal()" class="text-white text-xl">✕</button>
             </div>
-            <form id="history-form" class="p-4 space-y-4"
+            <form id="history-form" class="flex flex-col flex-1 overflow-hidden"
                 onsubmit="return (window.saveHistoryEntryHandler ? window.saveHistoryEntryHandler(event) : saveHistoryEntry(event))">
-                <input type="hidden" id="hist-product-type" value="unidades">
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Tipo de Producto</label>
-                    <div class="flex rounded-md shadow-sm" role="group">
-                        <button type="button" id="hist-type-unidades" disabled
-                            class="flex-1 px-4 py-2 text-sm font-medium text-gray-900 bg-white border border-gray-200 rounded-l-lg opacity-75 cursor-not-allowed">🔢
-                            Unidades</button>
-                        <button type="button" id="hist-type-paquete" disabled
-                            class="flex-1 px-4 py-2 text-sm font-medium text-gray-900 bg-white border-t border-b border-gray-200 opacity-75 cursor-not-allowed">📦
-                            Paquete</button>
-                        <button type="button" id="hist-type-ambos" disabled
-                            class="flex-1 px-4 py-2 text-sm font-medium text-gray-900 bg-white border border-gray-200 rounded-r-lg opacity-75 cursor-not-allowed">📦+🔢
-                            Ambos</button>
-                    </div>
-                    <p class="text-xs text-gray-500 mt-1">El tipo no puede modificarse en una compra</p>
-                </div>
-                <!-- Units per Package (Hidden by default) -->
-                <div id="hist-units-per-pkg-container" class="hidden bg-blue-50 p-3 rounded-lg border border-blue-200">
-                    <label class="block text-sm font-medium text-blue-800">Unidades por Paquete</label>
-                    <input type="number" id="hist-units-per-package" min="1" value="1" readonly
-                        class="mt-1 block w-full rounded-md border-blue-300 p-2 border bg-gray-100 cursor-not-allowed">
-                    <p class="text-xs text-gray-500 mt-1">Valor actual del producto</p>
-                </div>
-                <!-- Quantity (Simple) -->
-                <div id="hist-quantity-simple-container">
-                    <label id="hist-quantity-label" class="block text-sm font-medium text-gray-700">Stock a Agregar
-                        (Unidades)</label>
-                    <input type="number" id="hist-quantity" required min="1" value="1"
-                        class="mt-1 block w-full rounded-md border-gray-300 p-2 border focus:ring-blue-500 focus:border-blue-500">
-                </div>
-                <!-- Quantity (Ambos) -->
-                <div id="hist-quantity-ambos-container"
-                    class="hidden bg-gradient-to-r from-blue-50 to-green-50 p-4 rounded-lg border-2 border-blue-200">
-                    <label class="block text-sm font-bold text-gray-700 mb-3">📦 Stock a Agregar</label>
-                    <div class="grid grid-cols-2 gap-3 mb-3">
-                        <div>
-                            <label class="block text-xs font-medium text-gray-600">📦 Cantidad de Cajas</label>
-                            <input type="number" id="hist-box-quantity" min="0" value="0"
-                                class="mt-1 block w-full rounded-md border-blue-300 p-2 border focus:ring-blue-500 focus:border-blue-500"
-                                oninput="calculateHistTotalStock()">
+                <div class="flex-1 overflow-y-auto p-4 space-y-4">
+                    <input type="hidden" id="hist-product-type" value="unidades">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Tipo de Producto</label>
+                        <div class="flex rounded-md shadow-sm" role="group">
+                            <button type="button" id="hist-type-unidades" disabled
+                                class="flex-1 px-4 py-2 text-sm font-medium text-gray-900 bg-white border border-gray-200 rounded-l-lg opacity-75 cursor-not-allowed">🔢
+                                Unidades</button>
+                            <button type="button" id="hist-type-paquete" disabled
+                                class="flex-1 px-4 py-2 text-sm font-medium text-gray-900 bg-white border-t border-b border-gray-200 opacity-75 cursor-not-allowed">📦
+                                Paquete</button>
+                            <button type="button" id="hist-type-ambos" disabled
+                                class="flex-1 px-4 py-2 text-sm font-medium text-gray-900 bg-white border border-gray-200 rounded-r-lg opacity-75 cursor-not-allowed">📦+🔢
+                                Ambos</button>
                         </div>
-                        <div>
-                            <label class="block text-xs font-medium text-gray-600">🔢 Unidades Sueltas</label>
-                            <input type="number" id="hist-loose-units" min="0" value="0"
-                                class="mt-1 block w-full rounded-md border-green-300 p-2 border focus:ring-green-500 focus:border-green-500"
-                                oninput="calculateHistTotalStock()">
+                        <p class="text-xs text-gray-500 mt-1">El tipo no puede modificarse en una compra</p>
+                    </div>
+                    <!-- Units per Package (Hidden by default) -->
+                    <div id="hist-units-per-pkg-container"
+                        class="hidden bg-blue-50 p-3 rounded-lg border border-blue-200">
+                        <label class="block text-sm font-medium text-blue-800">Unidades por Paquete</label>
+                        <input type="number" id="hist-units-per-package" min="1" value="1" readonly
+                            class="mt-1 block w-full rounded-md border-blue-300 p-2 border bg-gray-100 cursor-not-allowed">
+                        <p class="text-xs text-gray-500 mt-1">Valor actual del producto</p>
+                    </div>
+                    <!-- Quantity (Simple) -->
+                    <div id="hist-quantity-simple-container">
+                        <label id="hist-quantity-label" class="block text-sm font-medium text-gray-700">Stock a Agregar
+                            (Unidades)</label>
+                        <input type="number" id="hist-quantity" required min="1" value="1"
+                            class="mt-1 block w-full rounded-md border-gray-300 p-2 border focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <!-- Quantity (Ambos) -->
+                    <div id="hist-quantity-ambos-container"
+                        class="hidden bg-gradient-to-r from-blue-50 to-green-50 p-4 rounded-lg border-2 border-blue-200">
+                        <label class="block text-sm font-bold text-gray-700 mb-3">📦 Stock a Agregar</label>
+                        <div class="grid grid-cols-2 gap-3 mb-3">
+                            <div>
+                                <label class="block text-xs font-medium text-gray-600">📦 Cantidad de Cajas</label>
+                                <input type="number" id="hist-box-quantity" min="0" value="0"
+                                    class="mt-1 block w-full rounded-md border-blue-300 p-2 border focus:ring-blue-500 focus:border-blue-500"
+                                    oninput="calculateHistTotalStock()">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-600">🔢 Unidades Sueltas</label>
+                                <input type="number" id="hist-loose-units" min="0" value="0"
+                                    class="mt-1 block w-full rounded-md border-green-300 p-2 border focus:ring-green-500 focus:border-green-500"
+                                    oninput="calculateHistTotalStock()">
+                            </div>
+                        </div>
+                        <div class="bg-white p-3 rounded-lg border border-gray-300">
+                            <span class="text-xs text-gray-500">Stock Total a Agregar:</span>
+                            <span id="hist-total-stock-display" class="text-lg font-bold text-blue-600 ml-2">0
+                                unidades</span>
+                            <p id="hist-stock-display" class="text-xs text-gray-500 mt-1 font-bold"></p>
                         </div>
                     </div>
-                    <div class="bg-white p-3 rounded-lg border border-gray-300">
-                        <span class="text-xs text-gray-500">Stock Total a Agregar:</span>
-                        <span id="hist-total-stock-display" class="text-lg font-bold text-blue-600 ml-2">0
-                            unidades</span>
-                        <p id="hist-stock-display" class="text-xs text-gray-500 mt-1 font-bold"></p>
+                    <!-- Costs & Prices -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div id="hist-cost-pkg-container" class="hidden">
+                            <label class="block text-xs font-medium text-gray-500">Costo Compra (Paquete)</label>
+                            <input type="number" id="hist-price-buy" step="0.01"
+                                class="mt-1 block w-full rounded-md border-gray-300 p-2 border"
+                                oninput="calculateHistCosts()">
+                        </div>
+                        <div id="hist-cost-unit-container" class="hidden">
+                            <label class="block text-xs font-medium text-gray-500">Costo Unitario</label>
+                            <input type="number" id="hist-unit-cost" step="0.01"
+                                class="mt-1 block w-full rounded-md border-gray-300 p-2 border"
+                                oninput="calculateHistCosts()">
+                        </div>
+                        <div id="hist-price-pkg-container" class="hidden">
+                            <label class="block text-xs font-medium text-gray-500">Precio Venta (Paquete)</label>
+                            <input type="number" id="hist-price-sell" step="0.01"
+                                class="mt-1 block w-full rounded-md border-gray-300 p-2 border"
+                                oninput="calculateHistProfit()">
+                        </div>
+                        <div id="hist-price-unit-container" class="hidden">
+                            <label class="block text-xs font-medium text-gray-500">Precio Venta (Unidad)</label>
+                            <input type="number" id="hist-unit-price" step="0.01"
+                                class="mt-1 block w-full rounded-md border-gray-300 p-2 border"
+                                oninput="calculateHistProfit()">
+                        </div>
+                    </div>
+                    <!-- Profit Display -->
+                    <div id="hist-profit-section" class="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">📊 GANANCIA ESTIMADA</label>
+                        <div id="hist-profit-pkg-container"
+                            class="hidden bg-blue-50 rounded-lg p-2 border border-blue-200 mb-2">
+                            <span class="text-xs text-gray-600 block">Por Paquete:</span>
+                            <span id="hist-profit-pkg" class="block text-lg font-bold text-green-700">$0.00</span>
+                        </div>
+                        <div id="hist-profit-unit-container"
+                            class="hidden bg-green-50 rounded-lg p-2 border border-green-200">
+                            <span class="text-xs text-gray-600 block">Por Unidad:</span>
+                            <span id="hist-profit-unit" class="block text-lg font-bold text-green-700">$0.00</span>
+                        </div>
+                    </div>
+                    <!-- Expiry Date -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">📅 Fecha de Vencimiento</label>
+                        <input type="date" id="hist-expiry-date"
+                            class="mt-1 block w-full rounded-md border-gray-300 p-2 border">
+                    </div>
+                    <!-- Notes -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Notas (opcional)</label>
+                        <input type="text" id="hist-notes" placeholder="Ej: Proveedor X, promoción..."
+                            class="mt-1 block w-full rounded-md border-gray-300 p-2 border">
                     </div>
                 </div>
-                <!-- Costs & Prices -->
-                <div class="grid grid-cols-2 gap-4">
-                    <div id="hist-cost-pkg-container" class="hidden">
-                        <label class="block text-xs font-medium text-gray-500">Costo Compra (Paquete)</label>
-                        <input type="number" id="hist-price-buy" step="0.01"
-                            class="mt-1 block w-full rounded-md border-gray-300 p-2 border"
-                            oninput="calculateHistCosts()">
-                    </div>
-                    <div id="hist-cost-unit-container" class="hidden">
-                        <label class="block text-xs font-medium text-gray-500">Costo Unitario</label>
-                        <input type="number" id="hist-unit-cost" step="0.01"
-                            class="mt-1 block w-full rounded-md border-gray-300 p-2 border"
-                            oninput="calculateHistCosts()">
-                    </div>
-                    <div id="hist-price-pkg-container" class="hidden">
-                        <label class="block text-xs font-medium text-gray-500">Precio Venta (Paquete)</label>
-                        <input type="number" id="hist-price-sell" step="0.01"
-                            class="mt-1 block w-full rounded-md border-gray-300 p-2 border"
-                            oninput="calculateHistProfit()">
-                    </div>
-                    <div id="hist-price-unit-container" class="hidden">
-                        <label class="block text-xs font-medium text-gray-500">Precio Venta (Unidad)</label>
-                        <input type="number" id="hist-unit-price" step="0.01"
-                            class="mt-1 block w-full rounded-md border-gray-300 p-2 border"
-                            oninput="calculateHistProfit()">
-                    </div>
+                <!-- Sticky Submit Button -->
+                <div class="flex-shrink-0 p-4 bg-white border-t border-gray-200">
+                    <button type="submit"
+                        class="w-full bg-green-600 text-white p-3 rounded-lg font-bold hover:bg-green-700 shadow-lg">💾
+                        Guardar Compra</button>
                 </div>
-                <!-- Profit Display -->
-                <div id="hist-profit-section" class="bg-gray-50 p-3 rounded-lg border border-gray-200">
-                    <label class="block text-sm font-medium text-gray-700 mb-2">📊 GANANCIA ESTIMADA</label>
-                    <div id="hist-profit-pkg-container"
-                        class="hidden bg-blue-50 rounded-lg p-2 border border-blue-200 mb-2">
-                        <span class="text-xs text-gray-600 block">Por Paquete:</span>
-                        <span id="hist-profit-pkg" class="block text-lg font-bold text-green-700">$0.00</span>
-                    </div>
-                    <div id="hist-profit-unit-container"
-                        class="hidden bg-green-50 rounded-lg p-2 border border-green-200">
-                        <span class="text-xs text-gray-600 block">Por Unidad:</span>
-                        <span id="hist-profit-unit" class="block text-lg font-bold text-green-700">$0.00</span>
-                    </div>
-                </div>
-                <!-- Expiry Date -->
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">📅 Fecha de Vencimiento</label>
-                    <input type="date" id="hist-expiry-date"
-                        class="mt-1 block w-full rounded-md border-gray-300 p-2 border">
-                </div>
-                <!-- Notes -->
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">Notas (opcional)</label>
-                    <input type="text" id="hist-notes" placeholder="Ej: Proveedor X, promoción..."
-                        class="mt-1 block w-full rounded-md border-gray-300 p-2 border">
-                </div>
-                <!-- Submit Button -->
-                <button type="submit"
-                    class="w-full bg-green-600 text-white p-3 rounded-lg font-bold hover:bg-green-700 shadow-lg transform transition hover:scale-[1.02]">💾
-                    Guardar Compra</button>
             </form>
         </div>
     </div>
@@ -874,6 +936,27 @@
                 <button onclick="window.restockList.clearManualList()"
                     class="bg-gray-200 hover:bg-gray-300 text-gray-700 py-2 px-4 rounded-lg font-medium">🧹
                     Limpiar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Expiry Products Modal -->
+    <div id="expiry-modal"
+        class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black bg-opacity-50 p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col">
+            <div
+                class="bg-gradient-to-r from-orange-500 to-red-500 p-4 rounded-t-2xl flex justify-between items-center">
+                <h3 class="text-lg font-bold text-white">📅 Productos por Vencer</h3>
+                <button onclick="window.closeExpiryModal()" class="text-white hover:text-gray-200 text-xl">✕</button>
+            </div>
+            <div id="expiry-modal-content" class="p-4 overflow-y-auto flex-1">
+                <!-- Content rendered by JS -->
+            </div>
+            <div class="p-4 border-t border-gray-200">
+                <button onclick="window.closeExpiryModal()"
+                    class="w-full bg-gray-200 hover:bg-gray-300 text-gray-700 py-2 px-4 rounded-lg font-medium">
+                    Cerrar
+                </button>
             </div>
         </div>
     </div>

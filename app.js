@@ -3,7 +3,7 @@
 // Global App State
 window.appState = {
     allProducts: [],
-    currentTab: 'inventario',
+    currentTab: 'ventas', // Default to Sales
     cartItems: [],
     productSalesCount: {},
     currentEditingId: null,
@@ -59,10 +59,9 @@ async function initApp() {
     // Setup Event Listeners
     setupEventListeners();
 
-    // Show filter menu if on inventario tab (default)
-    if (window.filterMenu && window.appState.currentTab === 'inventario') {
-        window.filterMenu.show();
-        window.filterMenu.updateCategories();
+    // Initialize UI based on default tab
+    if (window.ui && window.ui.switchTab) {
+        window.ui.switchTab(window.appState.currentTab, true);
     }
 }
 
@@ -95,6 +94,11 @@ async function fetchProducts() {
         // Update restock badge after products are loaded
         if (window.restockList && window.restockList.updateBadge) {
             window.restockList.updateBadge();
+        }
+
+        // Update expiry badge
+        if (window.updateExpiryBadge) {
+            window.updateExpiryBadge();
         }
 
     } catch (error) {
@@ -155,6 +159,7 @@ function openEditModal(productId) {
     document.getElementById('price-sell').value = product.price_sell || '';
     document.getElementById('unit-price').value = product.unit_price_sell || '';
     document.getElementById('expiry-date').value = product.expiry_date || '';
+    document.getElementById('expiry-warning-days').value = product.expiry_warning_days || 7;
 
     // New fields
     document.getElementById('units-per-package').value = product.units_per_package || 1;
@@ -355,6 +360,7 @@ async function handleProductSubmit(e) {
             price_sell: parseFloat(document.getElementById('price-sell').value) || 0,
             unit_price_sell: parseFloat(document.getElementById('unit-price').value) || null,
             expiry_date: document.getElementById('expiry-date').value || null,
+            expiry_warning_days: parseInt(document.getElementById('expiry-warning-days').value) || 7,
             supplier_contact: (document.getElementById('supplier-code').value + ' - ' + document.getElementById('supplier-phone').value).trim(),
             image_url: imageUrl,
             qr_code_url: qrUrl,

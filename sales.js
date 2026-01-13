@@ -2,6 +2,7 @@
 
 let salesCategory = null;
 let receivedAmount = 0;
+let selectedPaymentMethod = 'cash'; // 'cash' or 'digital'
 
 // ==================== DRAGGABLE CART FAB ====================
 const CART_FAB_POSITION_KEY = 'cart-fab-position';
@@ -135,14 +136,63 @@ function restoreCartFabPosition() {
     if (saved) {
         try {
             const pos = JSON.parse(saved);
-            fab.style.position = 'fixed';
-            fab.style.left = `${pos.left}px`;
-            fab.style.top = `${pos.top}px`;
-            fab.style.right = 'auto';
-            fab.style.bottom = 'auto';
-        } catch (e) { }
+
+            // Validate position is within current viewport
+            const fabWidth = 64; // FAB width
+            const fabHeight = 64; // FAB height
+            const maxX = window.innerWidth - fabWidth;
+            const maxY = window.innerHeight - fabHeight;
+
+            // Check if saved position is within bounds
+            const isValidX = pos.left >= 0 && pos.left <= maxX;
+            const isValidY = pos.top >= 0 && pos.top <= maxY;
+
+            if (isValidX && isValidY) {
+                fab.style.position = 'fixed';
+                fab.style.left = `${pos.left}px`;
+                fab.style.top = `${pos.top}px`;
+                fab.style.right = 'auto';
+                fab.style.bottom = 'auto';
+            } else {
+                // Position is out of bounds, reset to default (bottom-right)
+                resetCartFabToDefault();
+            }
+        } catch (e) {
+            resetCartFabToDefault();
+        }
     }
 }
+
+// Reset FAB to default bottom-right position
+function resetCartFabToDefault() {
+    const fab = document.getElementById('cart-fab');
+    if (!fab) return;
+
+    fab.style.position = 'fixed';
+    fab.style.left = 'auto';
+    fab.style.top = 'auto';
+    fab.style.right = '24px';
+    fab.style.bottom = '24px';
+
+    // Clear saved invalid position
+    localStorage.removeItem(CART_FAB_POSITION_KEY);
+}
+
+// Re-validate FAB position on window resize
+window.addEventListener('resize', () => {
+    const fab = document.getElementById('cart-fab');
+    if (!fab || fab.classList.contains('hidden')) return;
+
+    const rect = fab.getBoundingClientRect();
+    const isOutOfBounds = rect.right > window.innerWidth ||
+        rect.bottom > window.innerHeight ||
+        rect.left < 0 ||
+        rect.top < 0;
+
+    if (isOutOfBounds) {
+        resetCartFabToDefault();
+    }
+});
 
 // Initialize drag on DOM ready
 if (document.readyState === 'loading') {
@@ -390,82 +440,96 @@ async function confirmCartSale() {
     const subtotal = window.appState.cartItems.reduce((sum, item) => sum + (item.quantity * item.price), 0);
     const finalTotal = subtotal + extraAmount;
 
-    try {
-        // Generate unique transaction ID for this cart sale
-        const transactionId = crypto.randomUUID();
+    // ========== OPTIMISTIC UI: Respond immediately ==========
 
-        // Calculate extra per item (distribute extra among items proportionally)
-        const extraPerItem = window.appState.cartItems.length > 0 ? extraAmount / window.appState.cartItems.length : 0;
+    // 1. Show success toast IMMEDIATELY
+    let toastMsg = `✅ Venta: Bs ${finalTotal.toFixed(2)}`;
+    if (extraAmount !== 0) {
+        toastMsg += ` (${extraAmount >= 0 ? '+' : ''}${extraAmount.toFixed(2)} extra)`;
+    }
+    window.ui.showToast(toastMsg, 'success');
 
-        for (const item of window.appState.cartItems) {
-            window.appState.productSalesCount[item.productId] = (window.appState.productSalesCount[item.productId] || 0) + item.quantity;
+    // 2. Copy cart data for background processing
+    const itemsToProcess = [...window.appState.cartItems];
+    const extraToProcess = extraAmount;
+    const paymentToProcess = selectedPaymentMethod;
+    const transactionId = crypto.randomUUID();
 
-            const product = window.appState.allProducts.find(p => p.id === item.productId);
-            if (product) {
+    // 3. Update local stock IMMEDIATELY (optimistic update)
+    itemsToProcess.forEach(item => {
+        const product = window.appState.allProducts.find(p => p.id === item.productId);
+        if (product && product.track_stock !== false) {
+            let unitsToDeduct = item.quantity;
+            if (item.isBox) {
+                unitsToDeduct = item.quantity * (product.units_per_package || 1);
+            }
+            product.quantity = Math.max(0, (product.quantity || 0) - unitsToDeduct);
+        }
+        window.appState.productSalesCount[item.productId] = (window.appState.productSalesCount[item.productId] || 0) + item.quantity;
+    });
+
+    // 4. Clear cart and close panel IMMEDIATELY
+    clearCart();
+    selectedPaymentMethod = 'cash';
+    setPaymentMethod('cash');
+    closeCart();
+    renderProducts();
+
+    // 5. Update restock badge IMMEDIATELY
+    if (window.restockList && window.restockList.updateBadge) {
+        window.restockList.updateBadge();
+    }
+
+    // ========== BACKGROUND SYNC: Process server updates without blocking ==========
+
+    (async () => {
+        try {
+            for (const item of itemsToProcess) {
+                const product = window.appState.allProducts.find(p => p.id === item.productId);
+                if (!product) continue;
+
                 let unitsToDeduct = item.quantity;
                 if (item.isBox) {
                     unitsToDeduct = item.quantity * (product.units_per_package || 1);
                 }
 
-                // Only deduct stock if track_stock is enabled (default true)
-                let newQty = product.quantity || 0;
+                // Sync stock to server
                 if (product.track_stock !== false) {
-                    newQty = Math.max(0, (product.quantity || 0) - unitsToDeduct);
-                    await window.api.updateProductStock(item.productId, newQty);
+                    window.api.updateProductStock(item.productId, product.quantity).catch(e => {
+                        console.warn('Stock sync pending:', e.message);
+                    });
                 }
 
-                // Build notes with extra info if applicable
+                // Build notes
                 let notes = `Venta: ${item.quantity} ${item.isBox ? 'Caja(s)' : 'Unidad(es)'}`;
-                if (extraAmount !== 0) {
-                    const extraSign = extraAmount >= 0 ? '+' : '';
-                    notes += ` | Extra: ${extraSign}Bs ${extraAmount.toFixed(2)}`;
+                if (extraToProcess !== 0) {
+                    notes += ` | Extra: ${extraToProcess >= 0 ? '+' : ''}Bs ${extraToProcess.toFixed(2)}`;
                 }
 
-                // Calculate correct unit price for history
-                // If selling by box, price_sell should be per unit (box price / units per box)
-                // If selling by unit, price_sell is already per unit
                 const unitPrice = item.isBox ? (item.price / (product.units_per_package || 1)) : item.price;
 
-                await window.api.saveHistoryEntry({
+                // Save history entry
+                window.api.saveHistoryEntry({
                     product_id: item.productId,
                     action_type: 'venta',
                     quantity: unitsToDeduct,
                     price_sell: unitPrice,
-                    unit_cost: product.unit_cost || 0, // Guardar costo de compra para calcular ganancia
+                    unit_cost: product.unit_cost || 0,
                     total_buy: (product.unit_cost || 0) * unitsToDeduct,
                     notes: notes,
-                    // Persistent product info (so history survives product deletion)
+                    payment_method: paymentToProcess,
                     product_name: product.name,
                     product_category: product.category,
                     product_image_url: product.image_url,
-                    transaction_id: transactionId // Group items from same sale
+                    transaction_id: transactionId
+                }).catch(e => {
+                    console.warn('History sync pending:', e.message);
                 });
-
-                product.quantity = newQty;
             }
+        } catch (error) {
+            console.error('Background sync error:', error);
         }
-
-        // Show final toast with extra info
-        let toastMsg = `✅ Venta: Bs ${finalTotal.toFixed(2)}`;
-        if (extraAmount !== 0) {
-            toastMsg += ` (${extraAmount >= 0 ? '+' : ''}${extraAmount.toFixed(2)} extra)`;
-        }
-
-        clearCart();
-        toggleCart(); // Close cart panel after sale
-        renderProducts();
-
-        if (window.app.fetchProducts) window.app.fetchProducts();
-
-        // Update restock badge after sale
-        if (window.restockList && window.restockList.updateBadge) {
-            window.restockList.updateBadge();
-        }
-
-    } catch (error) {
-        console.error(error);
-        window.ui.showToast('Error al procesar venta', 'error');
-    }
+    })();
 }
 
 // Toggle Cart Panel (Slide up/down)
@@ -475,6 +539,11 @@ function toggleCart() {
     const panel = document.getElementById('cart-panel');
     const overlay = document.getElementById('cart-overlay');
     const fab = document.getElementById('cart-fab');
+
+    if (!panel || !overlay || !fab) {
+        console.warn('Cart elements not found');
+        return;
+    }
 
     cartOpen = !cartOpen;
 
@@ -489,6 +558,22 @@ function toggleCart() {
         overlay.classList.add('hidden');
         fab.classList.remove('hidden');
     }
+}
+
+// Explicitly close cart (used after sale confirmation to ensure state sync)
+function closeCart() {
+    const panel = document.getElementById('cart-panel');
+    const overlay = document.getElementById('cart-overlay');
+    const fab = document.getElementById('cart-fab');
+
+    if (!panel || !overlay || !fab) return;
+
+    // Force close state
+    cartOpen = false;
+    panel.classList.add('translate-y-full');
+    panel.classList.remove('translate-y-0');
+    overlay.classList.add('hidden');
+    fab.classList.remove('hidden');
 }
 
 // Extra functionality
@@ -537,6 +622,22 @@ function updateExtraDisplay() {
     }
 }
 
+// Payment Method
+function setPaymentMethod(method) {
+    selectedPaymentMethod = method;
+    const cashBtn = document.getElementById('pay-method-cash');
+    const digitalBtn = document.getElementById('pay-method-digital');
+    if (cashBtn && digitalBtn) {
+        if (method === 'cash') {
+            cashBtn.className = 'flex-1 py-2 px-3 rounded-xl font-bold text-sm transition-all bg-white text-green-600 shadow-md';
+            digitalBtn.className = 'flex-1 py-2 px-3 rounded-xl font-bold text-sm transition-all bg-white/20 text-white';
+        } else {
+            cashBtn.className = 'flex-1 py-2 px-3 rounded-xl font-bold text-sm transition-all bg-white/20 text-white';
+            digitalBtn.className = 'flex-1 py-2 px-3 rounded-xl font-bold text-sm transition-all bg-white text-green-600 shadow-md';
+        }
+    }
+}
+
 // Export
 window.sales = {
     loadCategories,
@@ -547,11 +648,13 @@ window.sales = {
     clearCart,
     confirmCartSale,
     toggleCart,
+    closeCart,
     setExtraMode,
     addExtra,
     resetExtra,
     addReceived,
-    resetReceived
+    resetReceived,
+    setPaymentMethod
 };
 
 // Change Calculator functionality

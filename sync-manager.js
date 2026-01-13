@@ -349,7 +349,7 @@ const syncManager = (() => {
 
     // --- Initialize ---
 
-    function init() {
+    async function init() {
         // Listen for online/offline events
         window.addEventListener('online', () => {
             console.log('Network: online');
@@ -365,14 +365,57 @@ const syncManager = (() => {
 
         // Initial status update
         updateOnlineStatusUI();
-        window.offlineDB.updatePendingCountUI();
+        if (window.offlineDB && window.offlineDB.updatePendingCountUI) {
+            window.offlineDB.updatePendingCountUI();
+        }
 
         // Start auto-sync
         startAutoSync();
 
-        // Initial sync if online
+        // CRITICAL: If online, sync from cloud IMMEDIATELY to recover any lost data
+        // This ensures that after clearing cache, data is restored from Supabase
         if (isOnline()) {
-            setTimeout(() => fullSync(), 2000);
+            console.log('📡 Online detected - syncing from cloud immediately...');
+            try {
+                await syncFromCloud();
+                console.log('✅ Initial cloud sync complete');
+            } catch (err) {
+                console.warn('Initial cloud sync failed:', err);
+            }
+
+            // Then push any pending local changes
+            setTimeout(() => syncToCloud().catch(console.error), 1000);
+        }
+    }
+
+    // Force sync from cloud - useful for data recovery after cache clear
+    async function forceCloudSync() {
+        if (!isOnline()) {
+            console.warn('Cannot force sync: offline');
+            return { success: false, reason: 'offline' };
+        }
+
+        console.log('🔄 Forcing cloud sync...');
+        updateSyncStatusUI('syncing');
+
+        try {
+            // Clear local pending ops that might conflict
+            if (window.offlineDB && window.offlineDB.db) {
+                // Don't clear pending - just prioritize cloud data
+            }
+
+            const result = await syncFromCloud();
+            updateSyncStatusUI('idle');
+
+            if (window.ui && window.ui.showToast) {
+                window.ui.showToast('✅ Datos sincronizados desde la nube', 'success');
+            }
+
+            return result;
+        } catch (err) {
+            updateSyncStatusUI('error');
+            console.error('Force sync failed:', err);
+            return { success: false, reason: err.message };
         }
     }
 
@@ -384,6 +427,7 @@ const syncManager = (() => {
         syncToCloud,
         syncFromCloud,
         fullSync,
+        forceCloudSync,
         startAutoSync,
         stopAutoSync,
         updateOnlineStatusUI

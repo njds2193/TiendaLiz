@@ -29,6 +29,7 @@ async function loadProductHistory(productId, productType) {
             .from('product_history')
             .select('*')
             .eq('product_id', productId)
+            .eq('action_type', 'compra')
             .order('created_at', { ascending: false });
 
         if (error) throw error;
@@ -119,8 +120,62 @@ async function loadProductHistory(productId, productType) {
                 html += '<div class="bg-blue-50 rounded p-2 text-sm mb-2"><span class="text-blue-600 text-xs block">Costo Unitario</span><span class="font-bold text-blue-600">Bs ' + Number(entry.unit_cost).toFixed(2) + '</span></div>';
             }
 
-            // Profit row
-            html += '<div class="bg-gradient-to-r from-green-100 to-green-50 rounded p-2 text-sm mb-2"><span class="text-green-700 text-xs block font-medium">📈 Ganancia Estimada</span><span class="font-bold text-green-700">Bs ' + profit.toFixed(2) + '</span></div>';
+            // Profit row - Show individual profit AND total profit for all types
+            if (productType === 'ambos') {
+                // Calculate package profit per unit
+                const pkgProfit = (entry.price_sell || 0) - (entry.price_buy || 0);
+                // Calculate unit profit per unit
+                const unitProfit = (entry.unit_price_sell || 0) - (entry.unit_cost || 0);
+                // Total profit (using unit profit as base since quantity is in units)
+                const totalProfit = unitProfit * (entry.quantity || 0);
+
+                html += '<div class="mb-2">' +
+                    '<p class="text-xs font-bold text-green-700 mb-1">📈 Ganancia Estimada</p>' +
+                    '<div class="grid grid-cols-2 gap-2 text-sm mb-2">' +
+                    '<div class="bg-gradient-to-r from-blue-100 to-blue-50 rounded p-2 border border-blue-200">' +
+                    '<span class="text-blue-600 text-xs block font-medium">Por Paquete</span>' +
+                    '<span class="font-bold text-blue-700 text-lg">Bs ' + pkgProfit.toFixed(2) + '</span></div>' +
+                    '<div class="bg-gradient-to-r from-green-100 to-green-50 rounded p-2 border border-green-200">' +
+                    '<span class="text-green-600 text-xs block font-medium">Por Unidad</span>' +
+                    '<span class="font-bold text-green-700 text-lg">Bs ' + unitProfit.toFixed(2) + '</span></div>' +
+                    '</div>' +
+                    '<div class="bg-gradient-to-r from-purple-100 to-purple-50 rounded p-2 border border-purple-200">' +
+                    '<span class="text-purple-600 text-xs block font-medium">💰 Ganancia Total de Compra</span>' +
+                    '<span class="font-bold text-purple-700 text-lg">Bs ' + totalProfit.toFixed(2) + '</span></div>' +
+                    '</div>';
+            } else if (productType === 'unidades') {
+                // For unidades: show profit per unit AND total profit
+                const unitSellPrice = entry.unit_price_sell || entry.price_sell || 0;
+                const unitBuyPrice = entry.unit_cost || entry.price_buy || 0;
+                const unitProfit = unitSellPrice - unitBuyPrice;
+                const totalProfit = unitProfit * (entry.quantity || 0);
+
+                html += '<div class="mb-2">' +
+                    '<p class="text-xs font-bold text-green-700 mb-1">📈 Ganancia Estimada</p>' +
+                    '<div class="grid grid-cols-2 gap-2 text-sm">' +
+                    '<div class="bg-gradient-to-r from-green-100 to-green-50 rounded p-2 border border-green-200">' +
+                    '<span class="text-green-600 text-xs block font-medium">Por Unidad</span>' +
+                    '<span class="font-bold text-green-700 text-lg">Bs ' + unitProfit.toFixed(2) + '</span></div>' +
+                    '<div class="bg-gradient-to-r from-purple-100 to-purple-50 rounded p-2 border border-purple-200">' +
+                    '<span class="text-purple-600 text-xs block font-medium">💰 Total Compra</span>' +
+                    '<span class="font-bold text-purple-700 text-lg">Bs ' + totalProfit.toFixed(2) + '</span></div>' +
+                    '</div></div>';
+            } else {
+                // For paquete: show profit per package AND total profit
+                const pkgProfit = (entry.price_sell || 0) - (entry.price_buy || 0);
+                const totalProfit = pkgProfit * (entry.quantity || 0);
+
+                html += '<div class="mb-2">' +
+                    '<p class="text-xs font-bold text-green-700 mb-1">📈 Ganancia Estimada</p>' +
+                    '<div class="grid grid-cols-2 gap-2 text-sm">' +
+                    '<div class="bg-gradient-to-r from-blue-100 to-blue-50 rounded p-2 border border-blue-200">' +
+                    '<span class="text-blue-600 text-xs block font-medium">Por Paquete</span>' +
+                    '<span class="font-bold text-blue-700 text-lg">Bs ' + pkgProfit.toFixed(2) + '</span></div>' +
+                    '<div class="bg-gradient-to-r from-purple-100 to-purple-50 rounded p-2 border border-purple-200">' +
+                    '<span class="text-purple-600 text-xs block font-medium">💰 Total Compra</span>' +
+                    '<span class="font-bold text-purple-700 text-lg">Bs ' + totalProfit.toFixed(2) + '</span></div>' +
+                    '</div></div>';
+            }
 
             // Expiry date (if exists)
             if (expiryDate) {
@@ -381,7 +436,7 @@ async function saveHistoryEntry(event) {
 
         closeAddHistoryModal();
         loadProductHistory(currentHistoryProduct.id, productType);
-        window.ui.showToast('✅ Compra registrada y producto actualizado');
+        // window.ui.showToast('✅ Compra registrada y producto actualizado');
 
         // Update local IndexedDB to sync immediately
         if (window.offlineDB && window.offlineDB.saveProduct) {
@@ -463,6 +518,7 @@ async function loadProductHistoryWithCache(productId, productType) {
             .from('product_history')
             .select('*')
             .eq('product_id', productId)
+            .eq('action_type', 'compra')
             .order('created_at', { ascending: false });
 
         if (error) throw error;
@@ -546,8 +602,62 @@ async function loadProductHistoryWithCache(productId, productType) {
                 html += '<div class="bg-blue-50 rounded p-2 text-sm mb-2"><span class="text-blue-600 text-xs block">Costo Unitario</span><span class="font-bold text-blue-600">Bs ' + Number(entry.unit_cost).toFixed(2) + '</span></div>';
             }
 
-            // Profit row
-            html += '<div class="bg-gradient-to-r from-green-100 to-green-50 rounded p-2 text-sm mb-2"><span class="text-green-700 text-xs block font-medium">📈 Ganancia Estimada</span><span class="font-bold text-green-700">Bs ' + profit.toFixed(2) + '</span></div>';
+            // Profit row - Show individual profit AND total profit for all types
+            if (productType === 'ambos') {
+                // Calculate package profit per unit
+                const pkgProfit = (entry.price_sell || 0) - (entry.price_buy || 0);
+                // Calculate unit profit per unit
+                const unitProfit = (entry.unit_price_sell || 0) - (entry.unit_cost || 0);
+                // Total profit (using unit profit as base since quantity is in units)
+                const totalProfit = unitProfit * (entry.quantity || 0);
+
+                html += '<div class="mb-2">' +
+                    '<p class="text-xs font-bold text-green-700 mb-1">📈 Ganancia Estimada</p>' +
+                    '<div class="grid grid-cols-2 gap-2 text-sm mb-2">' +
+                    '<div class="bg-gradient-to-r from-blue-100 to-blue-50 rounded p-2 border border-blue-200">' +
+                    '<span class="text-blue-600 text-xs block font-medium">Por Paquete</span>' +
+                    '<span class="font-bold text-blue-700 text-lg">Bs ' + pkgProfit.toFixed(2) + '</span></div>' +
+                    '<div class="bg-gradient-to-r from-green-100 to-green-50 rounded p-2 border border-green-200">' +
+                    '<span class="text-green-600 text-xs block font-medium">Por Unidad</span>' +
+                    '<span class="font-bold text-green-700 text-lg">Bs ' + unitProfit.toFixed(2) + '</span></div>' +
+                    '</div>' +
+                    '<div class="bg-gradient-to-r from-purple-100 to-purple-50 rounded p-2 border border-purple-200">' +
+                    '<span class="text-purple-600 text-xs block font-medium">💰 Ganancia Total de Compra</span>' +
+                    '<span class="font-bold text-purple-700 text-lg">Bs ' + totalProfit.toFixed(2) + '</span></div>' +
+                    '</div>';
+            } else if (productType === 'unidades') {
+                // For unidades: show profit per unit AND total profit
+                const unitSellPrice = entry.unit_price_sell || entry.price_sell || 0;
+                const unitBuyPrice = entry.unit_cost || entry.price_buy || 0;
+                const unitProfit = unitSellPrice - unitBuyPrice;
+                const totalProfit = unitProfit * (entry.quantity || 0);
+
+                html += '<div class="mb-2">' +
+                    '<p class="text-xs font-bold text-green-700 mb-1">📈 Ganancia Estimada</p>' +
+                    '<div class="grid grid-cols-2 gap-2 text-sm">' +
+                    '<div class="bg-gradient-to-r from-green-100 to-green-50 rounded p-2 border border-green-200">' +
+                    '<span class="text-green-600 text-xs block font-medium">Por Unidad</span>' +
+                    '<span class="font-bold text-green-700 text-lg">Bs ' + unitProfit.toFixed(2) + '</span></div>' +
+                    '<div class="bg-gradient-to-r from-purple-100 to-purple-50 rounded p-2 border border-purple-200">' +
+                    '<span class="text-purple-600 text-xs block font-medium">💰 Total Compra</span>' +
+                    '<span class="font-bold text-purple-700 text-lg">Bs ' + totalProfit.toFixed(2) + '</span></div>' +
+                    '</div></div>';
+            } else {
+                // For paquete: show profit per package AND total profit
+                const pkgProfit = (entry.price_sell || 0) - (entry.price_buy || 0);
+                const totalProfit = pkgProfit * (entry.quantity || 0);
+
+                html += '<div class="mb-2">' +
+                    '<p class="text-xs font-bold text-green-700 mb-1">📈 Ganancia Estimada</p>' +
+                    '<div class="grid grid-cols-2 gap-2 text-sm">' +
+                    '<div class="bg-gradient-to-r from-blue-100 to-blue-50 rounded p-2 border border-blue-200">' +
+                    '<span class="text-blue-600 text-xs block font-medium">Por Paquete</span>' +
+                    '<span class="font-bold text-blue-700 text-lg">Bs ' + pkgProfit.toFixed(2) + '</span></div>' +
+                    '<div class="bg-gradient-to-r from-purple-100 to-purple-50 rounded p-2 border border-purple-200">' +
+                    '<span class="text-purple-600 text-xs block font-medium">💰 Total Compra</span>' +
+                    '<span class="font-bold text-purple-700 text-lg">Bs ' + totalProfit.toFixed(2) + '</span></div>' +
+                    '</div></div>';
+            }
 
             // Expiry date (if exists)
             if (expiryDate) {

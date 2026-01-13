@@ -5,7 +5,11 @@ let currentPeriod = 'day'; // 'day', 'week', 'month'
 let currentCategory = null; // null = all categories
 let selectedWeekDay = 'total'; // 'total' or date string like '2025-12-31'
 let selectedMonth = new Date(); // For month navigation
+let currentPaymentFilter = 'all'; // 'all', 'cash', 'digital'
 let allHistory = [];
+// Multi-day export state
+let isSelectionMode = false;
+let selectedExportDates = new Set();
 
 // Set period filter
 function setPeriod(period) {
@@ -17,22 +21,65 @@ function setPeriod(period) {
 }
 
 // Set category filter
-function setCategory(category) {
+async function setCategory(category) {
+    const scrollY = window.scrollY;
     currentCategory = category === 'all' ? null : category;
-    loadReports();
+    await loadReports();
+    window.scrollTo(0, scrollY);
 }
 
 // Set selected day for week view
-function setWeekDay(dateStr) {
+async function setWeekDay(dateStr) {
+    const scrollY = window.scrollY;
     selectedWeekDay = dateStr;
-    loadReports();
+    await loadReports();
+    window.scrollTo(0, scrollY);
 }
 
 // Set selected day for month view
 let selectedMonthDay = 'total';
-function setMonthDay(day) {
+async function setMonthDay(day) {
+    const scrollY = window.scrollY; // Capture scroll position
+    if (isSelectionMode && day !== 'total') {
+        await toggleDateSelection(day);
+        window.scrollTo(0, scrollY); // Restore scroll after render
+        return;
+    }
     selectedMonthDay = day;
+    await loadReports();
+    window.scrollTo(0, scrollY); // Restore scroll
+}
+
+// Toggle selection mode
+function toggleSelectionMode() {
+    isSelectionMode = !isSelectionMode;
+    selectedExportDates.clear(); // Clear selection when toggling
     loadReports();
+}
+
+// Toggle individual date selection
+// Toggle individual date selection
+async function toggleDateSelection(day) {
+    // Construct full date string YYYY-MM-DD
+    const year = selectedMonth.getFullYear();
+    const month = String(selectedMonth.getMonth() + 1).padStart(2, '0');
+    const dayStr = String(day).padStart(2, '0');
+    const fullDate = `${year}-${month}-${dayStr}`;
+
+    if (selectedExportDates.has(fullDate)) {
+        selectedExportDates.delete(fullDate);
+    } else {
+        selectedExportDates.add(fullDate);
+    }
+    await loadReports();
+}
+
+// Set payment method filter
+async function setPaymentFilter(method) {
+    const scrollY = window.scrollY;
+    currentPaymentFilter = method;
+    await loadReports();
+    window.scrollTo(0, scrollY);
 }
 
 // Navigate to previous month
@@ -153,6 +200,33 @@ function calculateSalesByType(history) {
     });
 
     return { boxSales, boxProfit, boxCount, unitSales, unitProfit, unitCount };
+}
+
+// Calculate sales by payment method (cash vs digital)
+function calculateSalesByPaymentMethod(history) {
+    let cashSales = 0, cashProfit = 0, cashCount = 0;
+    let digitalSales = 0, digitalProfit = 0, digitalCount = 0;
+
+    history.forEach(item => {
+        const sale = item.price_sell * item.quantity;
+        const cost = (item.unit_cost || item.price_buy || 0) * item.quantity;
+        const profit = sale - cost;
+
+        // Check payment method (default to 'cash' for legacy data)
+        const paymentMethod = item.payment_method || 'cash';
+
+        if (paymentMethod === 'digital' || paymentMethod === 'qr') {
+            digitalSales += sale;
+            digitalProfit += profit;
+            digitalCount += 1;
+        } else {
+            cashSales += sale;
+            cashProfit += profit;
+            cashCount += 1;
+        }
+    });
+
+    return { cashSales, cashProfit, cashCount, digitalSales, digitalProfit, digitalCount };
 }
 
 // Get top products
@@ -454,6 +528,7 @@ async function loadReports() {
         }, 0);
 
         const byType = calculateSalesByType(displayFiltered);
+        const byPayment = calculateSalesByPaymentMethod(displayFiltered);
         const topProducts = getTopProducts(displayFiltered, 5);
         const topCategories = getTopCategories(displayFiltered, 5);
         const chartData = getChartData(allHistory, currentPeriod);
@@ -474,6 +549,18 @@ async function loadReports() {
                     </button>
                 </div>
                 
+                <!-- Export Button (Only for Day view) -->
+                <!-- Export Button (Visible in all views) -->
+                <div class="flex justify-end mb-2">
+                    <button onclick="window.reports.exportDailyReportPDF()" 
+                        class="text-white bg-red-600 hover:bg-red-700 text-sm font-bold flex items-center gap-2 px-3 py-2 rounded-lg shadow-sm transition-all">
+                        📄 Exportar PDF
+                    </button>
+                </div>
+
+                                
+                <!-- Productos Por Vencer Section -->
+                ${renderExpiringProductsSection()}
                 <!-- Period Tabs -->
                 <div class="flex gap-2 bg-gray-100 p-1 rounded-xl">
                     <button onclick="window.reports.setPeriod('day')" 
@@ -526,6 +613,20 @@ async function loadReports() {
                     </div>
                 </div>
                 
+                <!-- Sales by Payment Method -->
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="bg-gradient-to-br from-emerald-500 to-emerald-600 p-3 rounded-xl text-white">
+                        <p class="text-xs opacity-80">💵 Efectivo</p>
+                        <p class="text-lg font-bold">Bs ${byPayment.cashSales.toFixed(2)}</p>
+                        <p class="text-xs opacity-70">${byPayment.cashCount} ventas | Gan. Bs ${byPayment.cashProfit.toFixed(2)}</p>
+                    </div>
+                    <div class="bg-gradient-to-br from-purple-500 to-purple-600 p-3 rounded-xl text-white">
+                        <p class="text-xs opacity-80">📱 QR Digital</p>
+                        <p class="text-lg font-bold">Bs ${byPayment.digitalSales.toFixed(2)}</p>
+                        <p class="text-xs opacity-70">${byPayment.digitalCount} ventas | Gan. Bs ${byPayment.digitalProfit.toFixed(2)}</p>
+                    </div>
+                </div>
+                
                 <!-- Chart / Calendar -->
                 <div class="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
         `;
@@ -548,7 +649,15 @@ async function loadReports() {
                         class="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-600 font-bold transition-all">
                         ◀
                     </button>
-                    <h3 class="font-bold text-gray-700">🗓️ ${monthNames[calData.month]} ${calData.year}</h3>
+                    
+                    <div class="flex flex-col items-center">
+                        <h3 class="font-bold text-gray-700">🗓️ ${monthNames[calData.month]} ${calData.year}</h3>
+                        <button onclick="window.reports.toggleSelectionMode()" 
+                            class="text-xs px-2 py-1 rounded-full mt-1 transition-all ${isSelectionMode ? 'bg-red-100 text-red-600 border border-red-200 hover:bg-red-200' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}">
+                            ${isSelectionMode ? '❌ Cancelar' : 'Seleccionar Días'}
+                        </button>
+                    </div>
+
                     <button onclick="window.reports.nextMonth()" 
                         class="w-8 h-8 rounded-lg ${calData.isCurrentMonth ? 'bg-gray-50 text-gray-300 cursor-not-allowed' : 'bg-gray-100 hover:bg-gray-200 text-gray-600'} flex items-center justify-center font-bold transition-all"
                         ${calData.isCurrentMonth ? 'disabled' : ''}>
@@ -556,15 +665,23 @@ async function loadReports() {
                     </button>
                 </div>
 
-                <!-- TOTAL MONTH BUTTON -->
-                <button onclick="window.reports.setMonthDay('total')" 
-                    class="w-full mb-4 py-3 rounded-xl flex items-center justify-between px-4 transition-all ${isTotalSelected ? 'bg-blue-500 text-white shadow-lg scale-[1.02]' : 'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100'}">
-                    <div class="flex items-center gap-2">
-                        <span class="text-xl">📊</span>
-                        <span class="font-bold">TOTAL MES</span>
-                    </div>
-                    <span class="font-bold text-lg">Bs ${monthTotal.toFixed(2)}</span>
-                </button>
+                <!-- TOTAL MONTH BUTTON / EXPORT BUTTON -->
+                ${isSelectionMode && selectedExportDates.size > 0 ? `
+                    <button onclick="window.reports.exportDailyReportPDF()" 
+                        class="w-full mb-4 py-3 rounded-xl flex items-center justify-center gap-2 px-4 transition-all bg-red-600 text-white shadow-lg hover:bg-red-700">
+                        <span class="text-xl">📄</span>
+                        <span class="font-bold">EXPORTAR ${selectedExportDates.size} DÍAS</span>
+                    </button>
+                ` : `
+                    <button onclick="window.reports.setMonthDay('total')" 
+                        class="w-full mb-4 py-3 rounded-xl flex items-center justify-between px-4 transition-all ${isTotalSelected ? 'bg-blue-500 text-white shadow-lg scale-[1.02]' : 'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100'}">
+                        <div class="flex items-center gap-2">
+                            <span class="text-xl">📊</span>
+                            <span class="font-bold">TOTAL MES</span>
+                        </div>
+                        <span class="font-bold text-lg">Bs ${monthTotal.toFixed(2)}</span>
+                    </button>
+                `}
 
                 <div class="grid grid-cols-7 gap-1 text-center text-xs mb-2">
                     <span class="text-gray-400 font-medium">D</span>
@@ -592,23 +709,40 @@ async function loadReports() {
                 const isToday = isCurrentMonth && day === today;
                 const isSelected = selectedMonthDay === day;
 
+                // Check if date is selected in multi-day mode
+                const year = calData.year;
+                const month = String(calData.month + 1).padStart(2, '0');
+                const dayStr = String(day).padStart(2, '0');
+                const fullDate = `${year}-${month}-${dayStr}`;
+                const isMultiSelected = selectedExportDates.has(fullDate);
+
                 // Determine classes based on state
                 let classes = 'h-10 rounded-lg flex flex-col items-center justify-center text-xs cursor-pointer transition-all active:scale-95 ';
 
-                if (isSelected) {
-                    classes += 'bg-blue-500 text-white font-bold shadow-md ring-2 ring-blue-300';
-                } else if (isToday) {
-                    classes += 'bg-blue-100 text-blue-700 font-bold border border-blue-200';
-                } else if (hasSales) {
-                    classes += 'bg-green-50 text-green-700 font-medium border border-green-100 hover:bg-green-100';
+                if (isSelectionMode) {
+                    if (isMultiSelected) {
+                        classes += 'bg-green-500 text-white font-bold shadow-md ring-2 ring-green-300';
+                    } else if (hasSales) {
+                        classes += 'bg-white text-gray-600 border-2 border-green-100 hover:border-green-300';
+                    } else {
+                        classes += 'bg-gray-50 text-gray-300';
+                    }
                 } else {
-                    classes += 'text-gray-400 hover:bg-gray-50';
+                    if (isSelected) {
+                        classes += 'bg-blue-500 text-white font-bold shadow-md ring-2 ring-blue-300';
+                    } else if (isToday) {
+                        classes += 'bg-blue-100 text-blue-700 font-bold border border-blue-200';
+                    } else if (hasSales) {
+                        classes += 'bg-green-50 text-green-700 font-medium border border-green-100 hover:bg-green-100';
+                    } else {
+                        classes += 'text-gray-400 hover:bg-gray-50';
+                    }
                 }
 
                 html += `
                     <div class="${classes}" onclick="window.reports.setMonthDay(${day})">
                         <span>${day}</span>
-                        ${hasSales ? `<span class="text-[8px] ${isSelected ? 'text-white/90' : 'text-green-600'}">Bs ${calData.salesByDay[day].toFixed(0)}</span>` : ''}
+                        ${hasSales && !isMultiSelected ? `<span class="text-[8px] ${isSelected ? 'text-white/90' : 'text-green-600'}">Bs ${calData.salesByDay[day].toFixed(0)}</span>` : ''}
                     </div>
                 `;
             }
@@ -744,7 +878,24 @@ async function loadReports() {
                 
                 <!-- Recent Transactions -->
                 <div class="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
-                    <h3 class="font-bold text-gray-700 mb-3">📋 Transacciones Recientes</h3>
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="font-bold text-gray-700">📋 Transacciones Recientes</h3>
+                    </div>
+                    <!-- Payment Filter Buttons -->
+                    <div class="flex gap-2 mb-3">
+                        <button onclick="window.reports.setPaymentFilter('all')" 
+                            class="flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all ${currentPaymentFilter === 'all' ? 'bg-gray-700 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}">
+                            Todos
+                        </button>
+                        <button onclick="window.reports.setPaymentFilter('cash')" 
+                            class="flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all ${currentPaymentFilter === 'cash' ? 'bg-emerald-500 text-white' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'}">
+                            💵 Efectivo
+                        </button>
+                        <button onclick="window.reports.setPaymentFilter('digital')" 
+                            class="flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all ${currentPaymentFilter === 'digital' ? 'bg-purple-500 text-white' : 'bg-purple-50 text-purple-600 hover:bg-purple-100'}">
+                            📱 QR
+                        </button>
+                    </div>
                     <div class="divide-y">
         `;
 
@@ -754,67 +905,130 @@ async function loadReports() {
         const warmColors = ['bg-orange-100', 'bg-rose-100', 'bg-yellow-100', 'bg-red-100', 'bg-amber-100'];
         let colorIndex = 0;
 
-        displayFiltered.slice(0, 15).forEach(item => {
-            const date = new Date(item.created_at).toLocaleDateString() + ' ' + new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            const hasExtra = item.notes && item.notes.includes('Extra:');
+        // Filter by payment method
+        let paymentFiltered = displayFiltered;
+        if (currentPaymentFilter !== 'all') {
+            paymentFiltered = displayFiltered.filter(item => {
+                const method = item.payment_method || 'cash';
+                return method === currentPaymentFilter;
+            });
+        }
 
-            // Extract extra amount from notes
-            let extraInfo = '';
-            if (hasExtra) {
-                const extraMatch = item.notes.match(/Extra: ([+-]?Bs [\d.-]+)/);
-                if (extraMatch) {
-                    extraInfo = extraMatch[1];
-                }
-            }
+        // Group items by transaction_id
+        const transactions = [];
+        let currentTx = null;
 
-            // Calculate profit for this item
-            const saleTotal = item.price_sell * item.quantity;
-            const costTotal = (item.unit_cost || 0) * item.quantity;
-            const profit = saleTotal - costTotal;
-
-            // Transaction Grouping Logic
-            // If transaction_id exists and is different from last one, switch color
-            // If no transaction_id (legacy data), treat as separate transaction
+        paymentFiltered.forEach(item => {
             if (item.transaction_id) {
-                if (item.transaction_id !== lastTransactionId) {
-                    // Change to next color in palette
-                    colorIndex = (colorIndex + 1) % warmColors.length;
-                    lastTransactionId = item.transaction_id;
+                // Defensive check: Group by ID AND time proximity (max 2 minutes diff)
+                const itemDate = new Date(item.created_at);
+                const txDate = currentTx ? new Date(currentTx.date) : null;
+                const isSameTx = currentTx &&
+                    currentTx.id === item.transaction_id &&
+                    Math.abs(itemDate - txDate) < 120000; // 2 minutes tolerance
+
+                if (!currentTx || !isSameTx) {
+                    currentTx = {
+                        id: item.transaction_id,
+                        items: [],
+                        date: item.created_at,
+                        payment_method: item.payment_method || 'cash'
+                    };
+                    transactions.push(currentTx);
                 }
+                currentTx.items.push(item);
             } else {
-                // For legacy items without ID, change color every time
-                colorIndex = (colorIndex + 1) % warmColors.length;
-                lastTransactionId = null;
+                // Legacy items without ID treated as separate tx
+                transactions.push({
+                    id: null,
+                    items: [item],
+                    date: item.created_at,
+                    payment_method: item.payment_method || 'cash'
+                });
+                currentTx = null;
             }
-
-            const bgClass = warmColors[colorIndex];
-
-            html += `
-                <div class="py-2 px-2 flex justify-between items-center gap-2 ${bgClass} rounded-lg mb-1">
-                    <div class="flex-1 min-w-0">
-                        <p class="font-medium text-sm text-gray-800 truncate">
-                            ${item.product_name || item.products?.name || 'Producto eliminado'}
-                            ${hasExtra ? `<span class="text-purple-500 cursor-pointer" onclick="alert('Ajuste aplicado: ${extraInfo}')" title="Clic para ver ajuste">⚠️</span>` : ''}
-                        </p>
-                        <p class="text-xs text-gray-500">${date}</p>
-                    </div>
-                    <div class="text-right">
-                        <p class="font-bold text-sm text-green-600">+Bs ${saleTotal.toFixed(2)}</p>
-                        <p class="text-xs ${profit > 0 ? 'text-orange-500' : 'text-gray-400'}">
-                            ${profit > 0 ? '📈 ' : ''}Bs ${profit.toFixed(2)} gan.
-                        </p>
-                        <p class="text-xs text-gray-400">${item.quantity} un.</p>
-                    </div>
-                    <button onclick="window.reports.deleteTransaction('${item.id}', '${item.product_id}', ${item.quantity})" 
-                        class="w-8 h-8 flex items-center justify-center rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600 transition-all"
-                        title="Eliminar venta">
-                        🗑️
-                    </button>
-                </div>
-            `;
         });
 
-        if (displayFiltered.length === 0) {
+        console.log('Grouped Transactions:', transactions); // DEBUG LOG
+
+        // Render top 15 transactions
+        transactions.slice(0, 15).forEach((tx, index) => {
+            const bgClass = warmColors[index % warmColors.length];
+            let txTotalSale = 0;
+            let txTotalProfit = 0;
+
+            // Render items in transaction
+            tx.items.forEach(item => {
+                const date = new Date(item.created_at).toLocaleDateString() + ' ' + new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const hasExtra = item.notes && item.notes.includes('Extra:');
+                let extraInfo = '';
+                if (hasExtra) {
+                    const extraMatch = item.notes.match(/Extra: ([+-]?Bs [\d.-]+)/);
+                    if (extraMatch) extraInfo = extraMatch[1];
+                }
+
+                const saleTotal = item.price_sell * item.quantity;
+                const costTotal = (item.unit_cost || 0) * item.quantity;
+                const profit = saleTotal - costTotal;
+
+                txTotalSale += saleTotal;
+                txTotalProfit += profit;
+
+                // Payment method border color and badge
+                const paymentMethod = item.payment_method || 'cash';
+                const isDigital = paymentMethod === 'digital';
+                const paymentBorder = isDigital ? 'border-l-8 border-purple-500' : 'border-l-8 border-emerald-500';
+                const paymentBadge = isDigital
+                    ? '<span class="inline-flex items-center gap-1 bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded text-[10px] font-bold mt-1">📱 QR</span>'
+                    : '<span class="inline-flex items-center gap-1 bg-green-100 text-green-700 px-1.5 py-0.5 rounded text-[10px] font-bold mt-1">💵 Efectivo</span>';
+
+                html += `
+                    <div class="py-2 px-2 flex justify-between items-center gap-2 ${bgClass} ${paymentBorder} rounded-lg mb-1 shadow-sm">
+                        <div class="flex-1 min-w-0">
+                            <p class="font-medium text-sm text-gray-800 truncate">
+                                ${item.product_name || item.products?.name || 'Producto eliminado'}
+                                ${hasExtra ? `<span class="text-purple-500 cursor-pointer" onclick="alert('Ajuste aplicado: ${extraInfo}')" title="Clic para ver ajuste">⚠️</span>` : ''}
+                            </p>
+                            <p class="text-xs text-gray-500">${date}</p>
+                        </div>
+                        <div class="text-right flex flex-col items-end">
+                            <p class="font-bold text-sm text-green-600">+Bs ${saleTotal.toFixed(2)}</p>
+                            ${paymentBadge}
+                            <p class="text-xs ${profit > 0 ? 'text-orange-500' : 'text-gray-400'} mt-0.5">
+                                ${profit > 0 ? '📈 ' : ''}Bs ${profit.toFixed(2)} gan.
+                            </p>
+                            <p class="text-xs text-gray-400">${item.quantity} un.</p>
+                        </div>
+                        <button onclick="window.reports.deleteTransaction('${item.id}', '${item.product_id}', ${item.quantity})" 
+                            class="w-8 h-8 flex items-center justify-center rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600 transition-all ml-1"
+                            title="Eliminar venta">
+                            🗑️
+                        </button>
+                    </div>
+                `;
+            });
+
+            // Add Summary Row for multi-item transactions
+            if (tx.items.length > 1) {
+                const isDigital = tx.payment_method === 'digital';
+                const borderColor = isDigital ? 'border-purple-500' : 'border-emerald-500';
+
+                html += `
+                    <div class="mx-1 mb-6 mt-[-2px] pt-2 px-3 pb-2 bg-gray-50 rounded-b-lg border-l-8 ${borderColor} flex justify-between items-center shadow-sm border-t border-gray-100">
+                        <span class="text-xs font-bold text-gray-500 uppercase tracking-wide">Total Transacción (${tx.items.length} items)</span>
+                        <div class="text-right flex flex-col items-end">
+                            <span class="font-bold text-gray-800 text-sm">Bs ${txTotalSale.toFixed(2)}</span>
+                            <span class="text-xs text-orange-600 font-medium mt-0.5">(${txTotalProfit.toFixed(2)} gan.)</span>
+                        </div>
+                    </div>
+                `;
+            } else {
+                // Add extra spacing for single-item transactions too
+                html += `<div class="mb-4"></div>`;
+            }
+        });
+
+        if (paymentFiltered.length === 0) {
             html += '<p class="text-sm text-gray-400 text-center py-4">Sin transacciones en este período</p>';
         }
 
@@ -963,19 +1177,537 @@ function clearHistory(period) {
     }
 }
 
+// Get products expiring soon
+function getExpiringProducts() {
+    if (!window.appState || !window.appState.allProducts) return { expired: [], critical: [], upcoming: [] };
+
+    const now = new Date();
+    now.setHours(0, 0, 0, 0); // Start of today
+
+    const expired = [];
+    const critical = [];
+    const upcoming = [];
+
+    window.appState.allProducts.forEach(product => {
+        if (!product.expiry_date) return; // Skip products without expiry date
+
+        const expiryDate = new Date(product.expiry_date);
+        expiryDate.setHours(0, 0, 0, 0);
+
+        const diffTime = expiryDate - now;
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        const warningDays = product.expiry_warning_days || 7;
+
+        const item = {
+            ...product,
+            daysUntilExpiry: diffDays,
+            warningDays: warningDays
+        };
+
+        if (diffDays < 0) {
+            // Already expired
+            expired.push(item);
+        } else if (diffDays <= warningDays) {
+            // Critical - within warning period
+            critical.push(item);
+        } else if (diffDays <= 30) {
+            // Upcoming - within 30 days
+            upcoming.push(item);
+        }
+    });
+
+    // Sort by days until expiry (closest first)
+    expired.sort((a, b) => b.daysUntilExpiry - a.daysUntilExpiry); // Most expired first (most negative)
+    critical.sort((a, b) => a.daysUntilExpiry - b.daysUntilExpiry);
+    upcoming.sort((a, b) => a.daysUntilExpiry - b.daysUntilExpiry);
+
+    return { expired, critical, upcoming };
+}
+
 // Refresh data (clear cache)
 function refreshReports() {
     allHistory = [];
     loadReports();
 }
+// INSTRUCCIÓN: Reemplazar la función renderExpiringProductsSection en reports.js
+// Ubicación: Líneas 1157-1237 aproximadamente
+// Buscar: function renderExpiringProductsSection() {
+// Reemplazar TODO el contenido de la función con esto:
+// Render expiring products HTML section
+function renderExpiringProductsSection() {
+    const expiringData = getExpiringProducts();
+    const totalExpiring = expiringData.expired.length + expiringData.critical.length + expiringData.upcoming.length;
+    if (totalExpiring === 0) return ''; // Don't show section if no products expiring
+    let html = '<div class="bg-gradient-to-br from-orange-50 to-red-50 p-4 rounded-xl border-2 border-orange-200">';
+    html += '<h3 class="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">';
+    html += '📅 Productos por Vencer ';
+    html += '<span class="text-xs bg-orange-500 text-white px-2 py-1 rounded-full">' + totalExpiring + '</span>';
+    html += '</h3>';
+    // Expired products
+    if (expiringData.expired.length > 0) {
+        html += '<div class="mb-3">';
+        html += '<div class="flex items-center gap-2 mb-2">';
+        html += '<span class="text-sm font-bold text-red-700">🔴 VENCIDOS (' + expiringData.expired.length + ')</span>';
+        html += '</div>';
+        html += '<div class="space-y-2">';
+        expiringData.expired.slice(0, 3).forEach(p => {
+            html += '<div class="bg-white p-2 rounded-lg border border-red-200 flex items-center gap-2">';
+            html += '<img src="' + (p.image_url || 'placeholder.jpg') + '" class="w-10 h-10 rounded object-cover">';
+            html += '<div class="flex-1">';
+            html += '<p class="text-sm font-bold text-gray-800">' + p.name + '</p>';
+            html += '<p class="text-xs text-red-600">Venció hace ' + Math.abs(p.daysUntilExpiry) + ' día(s)</p>';
+            html += '</div></div>';
+        });
+        if (expiringData.expired.length > 3) {
+            html += '<p class="text-xs text-gray-500 text-center">+' + (expiringData.expired.length - 3) + ' más</p>';
+        }
+        html += '</div></div>';
+    }
+    // Critical products
+    if (expiringData.critical.length > 0) {
+        html += '<div class="mb-3">';
+        html += '<div class="flex items-center gap-2 mb-2">';
+        html += '<span class="text-sm font-bold text-orange-700">🟠 POR VENCER PRONTO (' + expiringData.critical.length + ')</span>';
+        html += '</div>';
+        html += '<div class="space-y-2">';
+        expiringData.critical.slice(0, 3).forEach(p => {
+            html += '<div class="bg-white p-2 rounded-lg border border-orange-200 flex items-center gap-2">';
+            html += '<img src="' + (p.image_url || 'placeholder.jpg') + '" class="w-10 h-10 rounded object-cover">';
+            html += '<div class="flex-1">';
+            html += '<p class="text-sm font-bold text-gray-800">' + p.name + '</p>';
+            html += '<p class="text-xs text-orange-600">Vence en ' + p.daysUntilExpiry + ' día(s) (configurado: ' + p.warningDays + 'd)</p>';
+            html += '</div></div>';
+        });
+        if (expiringData.critical.length > 3) {
+            html += '<p class="text-xs text-gray-500 text-center">+' + (expiringData.critical.length - 3) + ' más</p>';
+        }
+        html += '</div></div>';
+    }
+    // Upcoming products
+    if (expiringData.upcoming.length > 0) {
+        html += '<div>';
+        html += '<div class="flex items-center gap-2 mb-2">';
+        html += '<span class="text-sm font-bold text-yellow-700">🟡 PRÓXIMOS 30 DÍAS (' + expiringData.upcoming.length + ')</span>';
+        html += '</div>';
+        html += '<div class="space-y-2">';
+        expiringData.upcoming.slice(0, 2).forEach(p => {
+            html += '<div class="bg-white p-2 rounded-lg border border-yellow-200 flex items-center gap-2">';
+            html += '<img src="' + (p.image_url || 'placeholder.jpg') + '" class="w-10 h-10 rounded object-cover">';
+            html += '<div class="flex-1">';
+            html += '<p class="text-sm font-bold text-gray-800">' + p.name + '</p>';
+            html += '<p class="text-xs text-yellow-600">Vence en ' + p.daysUntilExpiry + ' día(s)</p>';
+            html += '</div></div>';
+        });
+        if (expiringData.upcoming.length > 2) {
+            html += '<p class="text-xs text-gray-500 text-center">+' + (expiringData.upcoming.length - 2) + ' más</p>';
+        }
+        html += '</div></div>';
+    }
+    html += '</div>';
+    return html;
+}
+// Export Daily Report to PDF
+async function old_exportDailyReportPDF() {
+    if (currentPeriod !== 'day') {
+        alert('Por favor selecciona la vista "Hoy" para exportar el reporte diario.');
+        return;
+    }
 
-// Export
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'letter'
+    });
+
+    // --- Data Preparation ---
+    // Re-calculate stats for the specific day to ensure accuracy
+    let dayTransactions = [];
+
+    if (selectedWeekDay !== 'total') {
+        // We are in week view but selected a specific day
+        dayTransactions = allHistory.filter(item => {
+            const d = new Date(item.created_at);
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}` === selectedWeekDay;
+        });
+    } else if (selectedMonthDay !== 'total') {
+        // We are in month view but selected a specific day
+        dayTransactions = allHistory.filter(item => {
+            const d = new Date(item.created_at);
+            return d.getDate() === selectedMonthDay;
+        });
+    } else {
+        // Default "Today" view
+        const todayStr = new Date().toISOString().split('T')[0];
+        dayTransactions = allHistory.filter(item => item.created_at.startsWith(todayStr));
+    }
+
+    if (dayTransactions.length === 0) {
+        alert('No hay ventas para exportar en este día.');
+        return;
+    }
+
+    const totalSales = dayTransactions.reduce((sum, item) => sum + (item.price_sell * item.quantity), 0);
+    const totalProfit = dayTransactions.reduce((sum, item) => {
+        const cost = item.unit_cost || item.price_buy || 0;
+        return sum + ((item.price_sell - cost) * item.quantity);
+    }, 0);
+
+    const byPayment = calculateSalesByPaymentMethod(dayTransactions);
+    const dateStr = selectedWeekDay !== 'total' ? selectedWeekDay :
+        (selectedMonthDay !== 'total' ? `Día ${selectedMonthDay}` : new Date().toLocaleDateString());
+
+    // --- PDF Generation ---
+
+    // Header
+    doc.setFontSize(18);
+    doc.setTextColor(220, 38, 38); // Red color for title
+    doc.text("TIENDA LIZ", 105, 15, { align: 'center' });
+
+    doc.setFontSize(12);
+    doc.setTextColor(0, 0, 0);
+    doc.text("REPORTE DE VENTAS DIARIO", 105, 22, { align: 'center' });
+    doc.text(`Fecha: ${dateStr}`, 105, 28, { align: 'center' });
+
+    // Summary Section (2 Columns)
+    const startY = 35;
+    const boxHeight = 25;
+    const colWidth = 90;
+    const gap = 10;
+    const leftX = 15;
+    const rightX = leftX + colWidth + gap;
+
+    // Left Column: Financials
+    doc.setFillColor(240, 248, 255); // Light blue bg
+    doc.roundedRect(leftX, startY, colWidth, boxHeight, 3, 3, 'F');
+
+    doc.setFontSize(10);
+    doc.setTextColor(100, 100, 100);
+    doc.text("Ventas Totales", leftX + 5, startY + 8);
+    doc.setFontSize(14);
+    doc.setTextColor(0, 0, 0);
+    doc.text(`Bs ${totalSales.toFixed(2)}`, leftX + 5, startY + 18);
+
+    doc.setFontSize(10);
+    doc.setTextColor(100, 100, 100);
+    doc.text("Ganancia", leftX + 45, startY + 8);
+    doc.setFontSize(14);
+    doc.setTextColor(34, 197, 94); // Green
+    doc.text(`Bs ${totalProfit.toFixed(2)}`, leftX + 45, startY + 18);
+
+    // Right Column: Payment Methods
+    doc.setFillColor(255, 250, 240); // Light orange bg
+    doc.roundedRect(rightX, startY, colWidth, boxHeight, 3, 3, 'F');
+
+    doc.setFontSize(10);
+    doc.setTextColor(100, 100, 100);
+    doc.text("Efectivo", rightX + 5, startY + 8);
+    doc.setFontSize(14);
+    doc.setTextColor(0, 0, 0);
+    doc.text(`Bs ${byPayment.cashSales.toFixed(2)}`, rightX + 5, startY + 18);
+
+    doc.setFontSize(10);
+    doc.setTextColor(100, 100, 100);
+    doc.text("QR / Digital", rightX + 45, startY + 8);
+    doc.setFontSize(14);
+    doc.setTextColor(147, 51, 234); // Purple
+    doc.text(`Bs ${byPayment.digitalSales.toFixed(2)}`, rightX + 45, startY + 18);
+
+    // Transaction Table
+    const tableData = dayTransactions.map(t => [
+        new Date(t.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        t.product_name,
+        t.quantity,
+        `Bs ${(t.price_sell * t.quantity).toFixed(2)}`,
+        (t.payment_method === 'qr' || t.payment_method === 'digital') ? 'QR' : 'Efectivo'
+    ]);
+
+    doc.autoTable({
+        startY: startY + boxHeight + 10,
+        head: [['Hora', 'Producto', 'Cant.', 'Total', 'Pago']],
+        body: tableData,
+        theme: 'grid',
+        headStyles: { fillColor: [234, 88, 12], textColor: 255 }, // Orange header
+        styles: { fontSize: 9 },
+        columnStyles: {
+            0: { cellWidth: 20 },
+            1: { cellWidth: 'auto' },
+            2: { cellWidth: 15, halign: 'center' },
+            3: { cellWidth: 25, halign: 'right' },
+            4: { cellWidth: 20, halign: 'center' }
+        }
+    });
+
+    // Footer
+    const pageCount = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setTextColor(150);
+        doc.text(`Página ${i} de ${pageCount} - Generado el ${new Date().toLocaleString()}`, 105, 270, { align: 'center' });
+    }
+
+    doc.save(`Reporte_Ventas_${dateStr.replace(/\//g, '-')}.pdf`);
+}
+
+
+// Export Daily Report to PDF (Supports Single and Multi-Day)
+async function exportDailyReportPDF() {
+    // Helper to get local YYYY-MM-DD
+    const getLocalStr = (d) => {
+        const date = new Date(d);
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    };
+
+    // Determine dates to export
+    let datesToExport = [];
+
+    if (isSelectionMode && selectedExportDates.size > 0) {
+        datesToExport = Array.from(selectedExportDates).sort();
+    } else if (currentPeriod === 'day') {
+        const dateStr = selectedWeekDay !== 'total' ? selectedWeekDay :
+            (selectedMonthDay !== 'total' ?
+                `${selectedMonth.getFullYear()}-${String(selectedMonth.getMonth() + 1).padStart(2, '0')}-${String(selectedMonthDay).padStart(2, '0')}` :
+                getLocalStr(new Date()));
+        datesToExport = [dateStr];
+    } else if (currentPeriod === 'week') {
+        // WEEK VIEW: Export all days in the current week
+        const chartData = getChartData(allHistory, 'week');
+        // chartData for week is array of [dateStr, amount]
+        datesToExport = chartData.map(d => d[0]).sort();
+    } else if (currentPeriod === 'month') {
+        // MONTH VIEW: Prompt user
+        const confirmExport = confirm("¿Deseas exportar el reporte de TODO EL MES?\n\n[Aceptar] = Exportar Mes Completo\n[Cancelar] = Seleccionar Días Específicos");
+
+        if (confirmExport) {
+            // Export entire month
+            const year = selectedMonth.getFullYear();
+            const month = String(selectedMonth.getMonth() + 1).padStart(2, '0');
+            const daysInMonth = new Date(year, selectedMonth.getMonth() + 1, 0).getDate();
+
+            for (let i = 1; i <= daysInMonth; i++) {
+                datesToExport.push(`${year}-${month}-${String(i).padStart(2, '0')}`);
+            }
+        } else {
+            // Activate selection mode
+            if (!isSelectionMode) {
+                toggleSelectionMode();
+                alert("Modo de selección activado. Por favor selecciona los días que deseas exportar y presiona el botón 'EXPORTAR X DÍAS'.");
+            }
+            return; // Exit to let user select
+        }
+    }
+
+    if (datesToExport.length === 0) {
+        alert('No hay fechas seleccionadas para exportar.');
+        return;
+    }
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'letter'
+    });
+
+    let grandTotalSales = 0;
+    let grandTotalProfit = 0;
+    let grandTotalCash = 0;
+    let grandTotalDigital = 0;
+
+    // Iterate through each date
+    datesToExport.forEach((dateStr, index) => {
+        if (index > 0) doc.addPage();
+
+        // Filter transactions for this date
+        // Filter transactions for this date using LOCAL time comparison
+        const dayTransactions = allHistory.filter(item => {
+            const itemLocalStr = getLocalStr(item.created_at);
+            return itemLocalStr === dateStr;
+        });
+
+        if (dayTransactions.length === 0) {
+            doc.setFontSize(12);
+            doc.text(`No hay ventas para el día ${dateStr}`, 105, 20, { align: 'center' });
+            return;
+        }
+
+        // Calculate Day Stats
+        const totalSales = dayTransactions.reduce((sum, item) => sum + (item.price_sell * item.quantity), 0);
+        const totalProfit = dayTransactions.reduce((sum, item) => {
+            const cost = item.unit_cost || item.price_buy || 0;
+            return sum + ((item.price_sell - cost) * item.quantity);
+        }, 0);
+        const byPayment = calculateSalesByPaymentMethod(dayTransactions);
+
+        // Accumulate Grand Totals
+        grandTotalSales += totalSales;
+        grandTotalProfit += totalProfit;
+        grandTotalCash += byPayment.cashSales;
+        grandTotalDigital += byPayment.digitalSales;
+
+        // --- Generate Page Content ---
+
+        // Header
+        doc.setFontSize(18);
+        doc.setTextColor(220, 38, 38); // Red color for title
+        doc.text("TIENDA LIZ", 105, 15, { align: 'center' });
+
+        doc.setFontSize(12);
+        doc.setTextColor(0, 0, 0);
+        doc.text("REPORTE DE VENTAS DIARIO", 105, 22, { align: 'center' });
+        doc.text(`Fecha: ${dateStr}`, 105, 28, { align: 'center' });
+
+        // Summary Section (2 Columns)
+        const startY = 35;
+        const boxHeight = 25;
+        const colWidth = 90;
+        const gap = 10;
+        const leftX = 15;
+        const rightX = leftX + colWidth + gap;
+
+        // Left Column: Financials
+        doc.setFillColor(240, 248, 255); // Light blue bg
+        doc.roundedRect(leftX, startY, colWidth, boxHeight, 3, 3, 'F');
+
+        doc.setFontSize(10);
+        doc.setTextColor(100, 100, 100);
+        doc.text("Ventas Totales", leftX + 5, startY + 8);
+        doc.setFontSize(14);
+        doc.setTextColor(0, 0, 0);
+        doc.text(`Bs ${totalSales.toFixed(2)}`, leftX + 5, startY + 18);
+
+        doc.setFontSize(10);
+        doc.setTextColor(100, 100, 100);
+        doc.text("Ganancia", leftX + 45, startY + 8);
+        doc.setFontSize(14);
+        doc.setTextColor(34, 197, 94); // Green
+        doc.text(`Bs ${totalProfit.toFixed(2)}`, leftX + 45, startY + 18);
+
+        // Right Column: Payment Methods
+        doc.setFillColor(255, 250, 240); // Light orange bg
+        doc.roundedRect(rightX, startY, colWidth, boxHeight, 3, 3, 'F');
+
+        doc.setFontSize(10);
+        doc.setTextColor(100, 100, 100);
+        doc.text("Efectivo", rightX + 5, startY + 8);
+        doc.setFontSize(14);
+        doc.setTextColor(0, 0, 0);
+        doc.text(`Bs ${byPayment.cashSales.toFixed(2)}`, rightX + 5, startY + 18);
+
+        doc.setFontSize(10);
+        doc.setTextColor(100, 100, 100);
+        doc.text("QR / Digital", rightX + 45, startY + 8);
+        doc.setFontSize(14);
+        doc.setTextColor(147, 51, 234); // Purple
+        doc.text(`Bs ${byPayment.digitalSales.toFixed(2)}`, rightX + 45, startY + 18);
+
+        // Transaction Table
+        const tableData = dayTransactions.map(t => [
+            new Date(t.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            t.product_name,
+            t.quantity,
+            `Bs ${(t.price_sell * t.quantity).toFixed(2)}`,
+            (t.payment_method === 'qr' || t.payment_method === 'digital') ? 'QR' : 'Efectivo'
+        ]);
+
+        doc.autoTable({
+            startY: startY + boxHeight + 10,
+            head: [['Hora', 'Producto', 'Cant.', 'Total', 'Pago']],
+            body: tableData,
+            theme: 'grid',
+            headStyles: { fillColor: [234, 88, 12], textColor: 255 }, // Orange header
+            styles: { fontSize: 9 },
+            columnStyles: {
+                0: { cellWidth: 20 },
+                1: { cellWidth: 'auto' },
+                2: { cellWidth: 15, halign: 'center' },
+                3: { cellWidth: 25, halign: 'right' },
+                4: { cellWidth: 20, halign: 'center' }
+            }
+        });
+    });
+
+    // --- Grand Total Summary Page (if multiple days) ---
+    if (datesToExport.length > 1) {
+        doc.addPage();
+
+        doc.setFontSize(22);
+        doc.setTextColor(220, 38, 38);
+        doc.text("RESUMEN TOTAL", 105, 30, { align: 'center' });
+        doc.setFontSize(14);
+        doc.setTextColor(0, 0, 0);
+        doc.text(`Período: ${datesToExport[0]} al ${datesToExport[datesToExport.length - 1]}`, 105, 40, { align: 'center' });
+        doc.text(`Total Días: ${datesToExport.length}`, 105, 48, { align: 'center' });
+
+        const startY = 60;
+        const boxHeight = 30;
+        const colWidth = 90;
+        const leftX = 15;
+        const rightX = leftX + colWidth + 10;
+
+        // Total Financials
+        doc.setFillColor(240, 248, 255);
+        doc.roundedRect(leftX, startY, colWidth, boxHeight, 3, 3, 'F');
+        doc.setFontSize(12);
+        doc.setTextColor(100, 100, 100);
+        doc.text("Ventas Totales Acumuladas", leftX + 5, startY + 10);
+        doc.setFontSize(18);
+        doc.setTextColor(0, 0, 0);
+        doc.text(`Bs ${grandTotalSales.toFixed(2)}`, leftX + 5, startY + 22);
+
+        doc.setFontSize(12);
+        doc.setTextColor(100, 100, 100);
+        doc.text("Ganancia Total", leftX + 5, startY + 45); // Below previous text
+        doc.setFontSize(18);
+        doc.setTextColor(34, 197, 94);
+        doc.text(`Bs ${grandTotalProfit.toFixed(2)}`, leftX + 5, startY + 57);
+
+        // Total Payments
+        doc.setFillColor(255, 250, 240);
+        doc.roundedRect(rightX, startY, colWidth, boxHeight, 3, 3, 'F');
+        doc.setFontSize(12);
+        doc.setTextColor(100, 100, 100);
+        doc.text("Total Efectivo", rightX + 5, startY + 10);
+        doc.setFontSize(18);
+        doc.setTextColor(0, 0, 0);
+        doc.text(`Bs ${grandTotalCash.toFixed(2)}`, rightX + 5, startY + 22);
+
+        doc.setFontSize(12);
+        doc.setTextColor(100, 100, 100);
+        doc.text("Total QR / Digital", rightX + 5, startY + 45);
+        doc.setFontSize(18);
+        doc.setTextColor(147, 51, 234);
+        doc.text(`Bs ${grandTotalDigital.toFixed(2)}`, rightX + 5, startY + 57);
+    }
+
+    // Footer
+    const pageCount = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setTextColor(150);
+        doc.text(`Página ${i} de ${pageCount} - Generado el ${new Date().toLocaleString()}`, 105, 270, { align: 'center' });
+    }
+
+    const fileName = datesToExport.length > 1 ?
+        `Reporte_Multidia_${datesToExport[0]}_al_${datesToExport[datesToExport.length - 1]}.pdf` :
+        `Reporte_Ventas_${datesToExport[0]}.pdf`;
+
+    doc.save(fileName);
+}
+
 window.reports = {
     load: loadReports,
     setPeriod,
     setCategory,
     setWeekDay,
     setMonthDay,
+    setPaymentFilter,
     prevMonth,
     nextMonth,
     deleteTransaction,
@@ -988,5 +1720,60 @@ window.reports = {
     executeClear,
     executeClearDate,
     showGranularDeleteOptions,
-    showDateSelector
+    showDateSelector,
+    getExpiringProducts,
+    renderExpiringProductsSection,
+    exportDailyReportPDF,
+    toggleSelectionMode
 };
+
+// --- Expiry Modal Functions ---
+
+function openExpiryModal() {
+    const modal = document.getElementById('expiry-modal');
+    const content = document.getElementById('expiry-modal-content');
+    if (!modal || !content) return;
+
+    const html = renderExpiringProductsSection();
+
+    if (!html) {
+        content.innerHTML = '<div class="text-center p-8 text-gray-500"><p class="text-xl">✅</p><p>No hay productos por vencer pronto.</p></div>';
+    } else {
+        content.innerHTML = html;
+    }
+
+    modal.classList.remove('hidden');
+}
+
+function closeExpiryModal() {
+    const modal = document.getElementById('expiry-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+function updateExpiryBadge() {
+    const badge = document.getElementById('expiry-badge');
+    if (!badge) return;
+
+    // Ensure products are loaded
+    if (!window.appState || !window.appState.allProducts) return;
+
+    const expiringData = getExpiringProducts();
+    const total = expiringData.expired.length + expiringData.critical.length + expiringData.upcoming.length;
+
+    if (total > 0) {
+        badge.textContent = total;
+        badge.classList.remove('hidden');
+    } else {
+        badge.classList.add('hidden');
+    }
+}
+
+// Expose to window
+window.openExpiryModal = openExpiryModal;
+window.closeExpiryModal = closeExpiryModal;
+window.updateExpiryBadge = updateExpiryBadge;
+
+// Initial check
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(updateExpiryBadge, 2000); // Wait for products to load
+});

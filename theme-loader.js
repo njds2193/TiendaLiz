@@ -243,9 +243,13 @@
     function patchTabSwitch() {
         const originalSwitchTab = window.ui?.switchTab;
         if (originalSwitchTab) {
-            window.ui.switchTab = function (tabName) {
-                originalSwitchTab(tabName);
-                updateActiveNav(tabName);
+            window.ui.switchTab = function (tabName, forceSwitch) {
+                const result = originalSwitchTab(tabName, forceSwitch);
+                // Only update nav if the switch was successful (not cancelled)
+                if (result !== false) {
+                    updateActiveNav(tabName);
+                }
+                return result;
             };
         }
     }

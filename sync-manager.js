@@ -6,7 +6,7 @@ console.log('--- Loading sync-manager.js ---');
 const syncManager = (() => {
     let isSyncing = false;
     let syncInterval = null;
-    const SYNC_INTERVAL_MS = 30000; // Auto-sync every 30 seconds when online
+    const SYNC_INTERVAL_MS = 10000; // Auto-sync every 10 seconds for multi-device support
 
     // --- Network Status ---
 

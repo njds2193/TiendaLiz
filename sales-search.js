@@ -27,7 +27,7 @@
         // Create the bottom search bar container
         const searchBarHTML = `
             <!-- Sales Bottom Search Bar -->
-            <div id="sales-search-bar" class="fixed bottom-[56px] left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-30 hidden">
+            <div id="sales-search-bar" class="fixed bottom-[56px] left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-[100] hidden">
                 <div class="max-w-md mx-auto">
                     <!-- Main Search Row -->
                     <div class="flex items-center gap-2 p-2">

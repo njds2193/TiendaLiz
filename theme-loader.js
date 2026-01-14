@@ -149,10 +149,42 @@
             padding-top: 20px !important; /* Add space for sticky header */
         }
 
-        /* Adjust Cart Panel max-height */
+        /* Adjust Cart Panel - Position above search bar and nav */
         #cart-panel {
-            bottom: 70px !important; /* Sit above nav */
-            max-height: calc(90vh - 70px) !important;
+            bottom: 120px !important; /* Above search bar (56px) + nav (56px) + margin */
+            height: auto !important;
+            max-height: 75vh !important;
+            display: flex !important;
+            flex-direction: column !important;
+            overflow: hidden !important;
+        }
+
+        /* Cart items list - scrollable with good height for items */
+        #cart-items {
+            flex: 1 1 auto !important;
+            min-height: 120px !important;
+            max-height: 45vh !important; /* More space for items */
+            overflow-y: auto !important;
+        }
+
+        /* Tab sections also need scrollable height */
+        #cart-section-extra,
+        #cart-section-change {
+            flex: 1 1 auto !important;
+            min-height: 120px !important;
+            max-height: 45vh !important;
+            overflow-y: auto !important;
+        }
+
+        /* Hide the original change calculator in footer since it's in separate tab */
+        #change-calc-original,
+        #cart-panel > div[style*="48BB78"] .bg-white\\/10 {
+            display: none !important;
+        }
+
+        /* Cart footer - never shrink, always visible */
+        #cart-panel > div[style*="48BB78"] {
+            flex-shrink: 0 !important;
         }
     `;
 
@@ -175,13 +207,13 @@
         const nav = document.createElement('div');
         nav.className = 'bottom-nav';
         nav.innerHTML = `
-            <div class="nav-item active" onclick="window.ui.switchTab('inventario')" id="nav-inventario">
+            <div class="nav-item" onclick="window.ui.switchTab('inventario')" id="nav-inventario">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                 </svg>
                 <span>Inventario</span>
             </div>
-            <div class="nav-item" onclick="window.ui.switchTab('ventas')" id="nav-ventas">
+            <div class="nav-item active" onclick="window.ui.switchTab('ventas')" id="nav-ventas">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>

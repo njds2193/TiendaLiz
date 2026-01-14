@@ -1,10 +1,11 @@
-const CACHE_NAME = 'cloudstore-v23';
+const CACHE_NAME = 'cloudstore-v24';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
   './manifest.json',
   './offline-db.js',
   './sync-manager.js',
+  './realtime-sync.js',
   './api.js',
   './ui.js',
   './sales.js',

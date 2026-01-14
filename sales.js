@@ -492,6 +492,11 @@ async function confirmCartSale() {
 
     // ========== BACKGROUND SYNC: Process server updates without blocking ==========
 
+    // Mark as local change to avoid duplicate notifications from realtime
+    if (window.realtimeSync && window.realtimeSync.markLocalChange) {
+        window.realtimeSync.markLocalChange();
+    }
+
     (async () => {
         try {
             for (const item of itemsToProcess) {
@@ -503,11 +508,14 @@ async function confirmCartSale() {
                     unitsToDeduct = item.quantity * (product.units_per_package || 1);
                 }
 
-                // Sync stock to server
+                // Sync stock to server IMMEDIATELY (important for multi-device)
                 if (product.track_stock !== false) {
-                    window.api.updateProductStock(item.productId, product.quantity).catch(e => {
+                    try {
+                        await window.api.updateProductStock(item.productId, product.quantity);
+                        console.log(`✅ Stock synced: ${product.name} = ${product.quantity}`);
+                    } catch (e) {
                         console.warn('Stock sync pending:', e.message);
-                    });
+                    }
                 }
 
                 // Build notes

@@ -466,7 +466,11 @@
         selectProduct,
         filterByCategory,
         clearSearch,
-        renderCategoryChips
+        renderCategoryChips,
+        // New: expose filter state for realtime-sync
+        hasActiveFilter: () => currentSearchQuery.length > 0 || activeCategory !== null,
+        getCurrentQuery: () => currentSearchQuery,
+        getActiveCategory: () => activeCategory
     };
 
     init();

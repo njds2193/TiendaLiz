@@ -188,21 +188,55 @@ const realtimeSync = (() => {
         }
     }
 
-    // Refresh UI after remote changes
+    // Refresh UI after remote changes - RESPECTING ACTIVE FILTERS
     function refreshUI() {
-        // Refresh inventory list
-        if (window.ui && window.ui.renderProductList) {
+        // Check if we're on the inventory tab
+        const isInventoryTab = window.appState.currentTab === 'inventario';
+
+        // Refresh inventory list ONLY if we should
+        if (window.ui && window.ui.renderProductList && isInventoryTab) {
+            // Check for active filters from filter-menu.js
+            // filterMenu stores its state internally, we need to check if a filter is active
+
+            // Check 1: Search filter (single product search from filterMenu)
+            const fabBadge = document.getElementById('fab-filter-badge');
+            const hasActiveFilter = fabBadge && !fabBadge.classList.contains('hidden');
+
+            if (hasActiveFilter) {
+                // A filter is active - don't change the displayed products
+                // Just update the data in window.appState.allProducts (already done)
+                // The currently displayed products should stay the same
+                console.log('📌 Filter active - keeping current view, only updating data');
+
+                // However, we should update the displayed product if it's the one that changed
+                // Re-render with the same filter by not calling renderProductList
+                // The data is already updated in allProducts
+                return; // Don't refresh the product list - keep the filter intact
+            }
+
+            // Check 2: Category filter (from appState or categoryFilter)
             if (window.appState.activeCategory) {
                 const filtered = window.appState.allProducts.filter(p => p.category === window.appState.activeCategory);
                 window.ui.renderProductList(filtered, 'product-list');
             } else {
+                // No filter active - show all products
                 window.ui.renderProductList(window.appState.allProducts, 'product-list');
             }
         }
 
-        // Refresh sales grid
+        // Refresh sales grid - RESPECTING ACTIVE SEARCH FILTER
         if (window.sales && window.sales.renderProducts) {
-            window.sales.renderProducts();
+            // Check if salesSearch has an active filter (search query or category)
+            const salesHasFilter = window.salesSearch && window.salesSearch.hasActiveFilter && window.salesSearch.hasActiveFilter();
+
+            if (salesHasFilter) {
+                // Sales search is active - don't reset the view
+                console.log('📌 Sales filter active - keeping current view');
+                // Data in allProducts is already updated, the current filtered view stays
+            } else {
+                // No filter in sales - safe to refresh
+                window.sales.renderProducts();
+            }
         }
 
         // Update restock badge

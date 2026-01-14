@@ -237,15 +237,6 @@ function renderProducts(searchQuery = '') {
 
     const grid = document.getElementById('sales-products-grid');
 
-    // SCROLL RESET: When filtering (search active), scroll the container to top
-    // This ensures the filtered results are visible immediately
-    if (searchQuery) {
-        const container = document.getElementById('sales-products');
-        if (container) {
-            container.scrollTop = 0;
-        }
-    }
-
     if (products.length === 0) {
         grid.innerHTML = '<div class="col-span-3 text-center text-gray-400 py-8">No hay productos</div>';
         return;
@@ -297,7 +288,7 @@ function renderProducts(searchQuery = '') {
                      onclick="${tapAction}">
             <div class="relative">
                 ${boxButton}
-                <img src="${p.image_url || 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PHJlY3Qgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiIGZpbGw9IiNlN2U3ZTciLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9InNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTkiPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg=='}\" class="w-full h-24 object-cover">
+                <img src="${p.image_url || 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PHJlY3Qgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiIGZpbGw9IiNlN2U3ZTciLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9InNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTkiPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg=='}" class="w-full h-24 object-cover">
                 ${salesCount > 0 ? `<span class="absolute top-1 right-1 bg-orange-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">${salesCount}</span>` : ''}
                 <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-1">
                     <p class="text-white text-xs truncate font-medium text-center" title="${p.name}">${p.name}</p>
@@ -309,6 +300,24 @@ function renderProducts(searchQuery = '') {
             </div>
         </div>`;
     }).join('');
+
+    // SCROLL RESET: AFTER rendering content, scroll to top
+    // Use requestAnimationFrame + setTimeout to ensure DOM is fully updated (especially on mobile)
+    if (searchQuery) {
+        requestAnimationFrame(() => {
+            setTimeout(() => {
+                const container = document.getElementById('sales-products');
+                if (container) {
+                    container.scrollTop = 0;
+                    // Also try scrollIntoView for better mobile compatibility
+                    const firstProduct = grid.querySelector('.product-card');
+                    if (firstProduct) {
+                        firstProduct.scrollIntoView({ behavior: 'instant', block: 'start' });
+                    }
+                }
+            }, 50);
+        });
+    }
 }
 
 function addToCart(productId, isBox = false) {

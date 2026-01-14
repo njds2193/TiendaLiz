@@ -19,7 +19,62 @@
     function setup() {
         createHTML();
         attachEvents();
+        setupKeyboardHandler(); // Handle keyboard visibility on mobile
         console.log('Sales search bar initialized');
+    }
+
+    // ==================== KEYBOARD HANDLER (Mobile) ====================
+    // Reposition search bar when keyboard opens/closes
+    function setupKeyboardHandler() {
+        const searchBar = document.getElementById('sales-search-bar');
+        if (!searchBar) return;
+
+        // Use visualViewport API for better keyboard detection
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', () => {
+                adjustForKeyboard(searchBar);
+            });
+            window.visualViewport.addEventListener('scroll', () => {
+                adjustForKeyboard(searchBar);
+            });
+        }
+
+        // Fallback: detect focus on input
+        const searchInput = document.getElementById('sales-search-input');
+        if (searchInput) {
+            searchInput.addEventListener('focus', () => {
+                // Small delay to let keyboard open
+                setTimeout(() => adjustForKeyboard(searchBar), 100);
+            });
+            searchInput.addEventListener('blur', () => {
+                // Reset position when keyboard closes
+                setTimeout(() => {
+                    searchBar.style.bottom = '56px';
+                    searchBar.style.transform = '';
+                }, 100);
+            });
+        }
+    }
+
+    function adjustForKeyboard(searchBar) {
+        if (!window.visualViewport || !searchBar) return;
+
+        const viewport = window.visualViewport;
+        const layoutHeight = window.innerHeight;
+        const viewportHeight = viewport.height;
+        const keyboardHeight = layoutHeight - viewportHeight;
+
+        if (keyboardHeight > 100) {
+            // Keyboard is open - position search bar above it
+            // The bar needs to be at the bottom of the visible viewport
+            const bottomOffset = keyboardHeight + 10; // 10px padding above keyboard
+            searchBar.style.bottom = `${bottomOffset}px`;
+            searchBar.style.transform = 'translateZ(0)'; // Force GPU acceleration
+        } else {
+            // Keyboard is closed - reset to normal position
+            searchBar.style.bottom = '56px';
+            searchBar.style.transform = '';
+        }
     }
 
     // ==================== CREATE HTML ====================

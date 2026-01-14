@@ -236,6 +236,16 @@ function renderProducts(searchQuery = '') {
     products.sort((a, b) => (window.appState.productSalesCount[b.id] || 0) - (window.appState.productSalesCount[a.id] || 0));
 
     const grid = document.getElementById('sales-products-grid');
+
+    // SCROLL RESET: When filtering (search active), scroll the container to top
+    // This ensures the filtered results are visible immediately
+    if (searchQuery) {
+        const container = document.getElementById('sales-products');
+        if (container) {
+            container.scrollTop = 0;
+        }
+    }
+
     if (products.length === 0) {
         grid.innerHTML = '<div class="col-span-3 text-center text-gray-400 py-8">No hay productos</div>';
         return;

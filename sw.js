@@ -1,4 +1,4 @@
-const CACHE_NAME = 'cloudstore-v26';
+const CACHE_NAME = 'cloudstore-v27';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',

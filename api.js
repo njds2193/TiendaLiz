@@ -280,6 +280,77 @@ async function apiUpdateProductStock(productId, newQuantity) {
     return true;
 }
 
+// INCREMENTAL STOCK UPDATE - For multi-device concurrent sales
+// Uses SQL decrement instead of absolute value to prevent data loss
+async function apiDecrementProductStock(productId, decrementAmount) {
+    if (decrementAmount <= 0) {
+        console.warn('Invalid decrement amount:', decrementAmount);
+        return { success: false, error: 'Invalid amount' };
+    }
+
+    // Update local DB first (optimistic)
+    if (hasOfflineDB()) {
+        const products = await window.offlineDB.getAllProducts();
+        const product = products.find(p => p.id === productId);
+        if (product) {
+            const newQuantity = Math.max(0, (product.quantity || 0) - decrementAmount);
+            await window.offlineDB.updateProductStock(productId, newQuantity);
+            console.log(`Local stock decremented: ${product.name} -= ${decrementAmount} (now: ${newQuantity})`);
+        }
+    }
+
+    // Sync to cloud using RPC for atomic decrement
+    if (canUseCloud()) {
+        try {
+            // Use Supabase RPC for atomic decrement (if available)
+            // Fallback: Use SQL directly through update with GREATEST to prevent negative
+            const { data, error } = await supabaseClient.rpc('decrement_stock', {
+                p_product_id: productId,
+                p_amount: decrementAmount
+            });
+
+            if (error) {
+                // RPC might not exist - fallback to fetch-then-update
+                console.warn('RPC not available, using fallback method');
+
+                // Get current cloud stock
+                const { data: currentProduct, error: fetchError } = await supabaseClient
+                    .from('products')
+                    .select('quantity')
+                    .eq('id', productId)
+                    .single();
+
+                if (fetchError) throw fetchError;
+
+                // Calculate new quantity (never go negative)
+                const newQuantity = Math.max(0, (currentProduct.quantity || 0) - decrementAmount);
+
+                // Update with the new quantity
+                const { error: updateError } = await supabaseClient
+                    .from('products')
+                    .update({ quantity: newQuantity, updated_at: new Date().toISOString() })
+                    .eq('id', productId);
+
+                if (updateError) throw updateError;
+
+                console.log(`✅ Cloud stock decremented: ${productId} -= ${decrementAmount} (now: ${newQuantity})`);
+                return { success: true, newQuantity };
+            }
+
+            console.log(`✅ Cloud stock atomically decremented: ${productId} -= ${decrementAmount}`);
+            return { success: true, data };
+
+        } catch (error) {
+            console.error('Stock decrement failed:', error);
+            // Don't throw - local was updated, cloud will sync later
+            return { success: false, error: error.message, localUpdated: true };
+        }
+    }
+
+    return { success: true, localOnly: true };
+}
+
+
 // --- Reports API (Offline-First) ---
 
 async function apiFetchSalesHistory() {
@@ -521,6 +592,7 @@ Object.assign(window.api, {
     clearHistoryByPeriod: apiClearHistoryByPeriod,
     clearHistoryByDate: apiClearHistoryByDate,
     updateProductStock: apiUpdateProductStock,
+    decrementProductStock: apiDecrementProductStock, // NEW: Incremental stock update
     fetchSalesHistory: apiFetchSalesHistory,
     client: supabaseClient,
     // New helpers

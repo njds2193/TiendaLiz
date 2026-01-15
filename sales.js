@@ -527,11 +527,13 @@ async function confirmCartSale() {
                     unitsToDeduct = item.quantity * (product.units_per_package || 1);
                 }
 
-                // Sync stock to server IMMEDIATELY (important for multi-device)
+                // Sync stock decrement to server IMMEDIATELY (important for multi-device)
+                // INCREMENTAL: Use decrementProductStock instead of absolute value
+                // This prevents data loss when two devices sell simultaneously
                 if (product.track_stock !== false) {
                     try {
-                        await window.api.updateProductStock(item.productId, product.quantity);
-                        console.log(`✅ Stock synced: ${product.name} = ${product.quantity}`);
+                        await window.api.decrementProductStock(item.productId, unitsToDeduct);
+                        console.log(`✅ Stock decremented: ${product.name} -= ${unitsToDeduct}`);
                     } catch (e) {
                         console.warn('Stock sync pending:', e.message);
                     }

@@ -133,6 +133,40 @@
         }
     }
 
+    // ========== FAB VISIBILITY - Ocultar botón + cuando hay modales abiertos ==========
+
+    // Ocultar el FAB
+    function hideFab() {
+        const fabBtn = document.getElementById('fab-btn');
+        if (fabBtn) {
+            fabBtn.style.display = 'none';
+        }
+    }
+
+    // Mostrar el FAB (solo si estamos en la pestaña de inventario y no hay modales abiertos)
+    function showFab() {
+        // Solo mostrar si no hay modales abiertos
+        if (modalStack.length > 0) return;
+
+        // Solo mostrar si estamos en la pestaña de inventario
+        if (window.appState && window.appState.currentTab === 'inventario') {
+            const fabBtn = document.getElementById('fab-btn');
+            if (fabBtn) {
+                fabBtn.style.display = '';
+                fabBtn.classList.remove('hidden');
+            }
+        }
+    }
+
+    // Verificar visibilidad del FAB basado en modales abiertos
+    function updateFabVisibility() {
+        if (modalStack.length > 0) {
+            hideFab();
+        } else {
+            showFab();
+        }
+    }
+
     // Observar cambios en los modales para agregar/quitar del historial automáticamente
     function observeModals() {
         const observer = new MutationObserver((mutations) => {
@@ -148,9 +182,11 @@
                         if (!target.classList.contains('hidden')) {
                             // Modal abierto
                             pushModalState(modalId);
+                            hideFab(); // Ocultar FAB
                         } else {
                             // Modal cerrado
                             popModalState(modalId);
+                            updateFabVisibility(); // Verificar si debemos mostrar el FAB
                         }
                     }
 
@@ -159,9 +195,11 @@
                         if (!target.classList.contains('translate-y-full')) {
                             // Carrito abierto
                             pushModalState(modalId);
+                            hideFab(); // Ocultar FAB
                         } else {
                             // Carrito cerrado
                             popModalState(modalId);
+                            updateFabVisibility(); // Verificar si debemos mostrar el FAB
                         }
                     }
                 }
@@ -183,6 +221,7 @@
         }
 
         console.log('✅ Modal observers initialized for back gesture handling');
+        console.log('✅ FAB visibility management enabled');
     }
 
     // Evento: inicio del toque

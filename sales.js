@@ -583,6 +583,11 @@ async function confirmCartSale() {
                     console.warn('Extra history sync pending:', e.message);
                 });
             }
+
+            // Refresh sales grid to show updated stock values from server
+            if (window.sales && window.sales.renderProducts) {
+                window.sales.renderProducts();
+            }
         } catch (error) {
             console.error('Background sync error:', error);
         }

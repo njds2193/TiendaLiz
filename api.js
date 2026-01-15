@@ -295,6 +295,15 @@ async function apiDecrementProductStock(productId, decrementAmount) {
         if (product) {
             const newQuantity = Math.max(0, (product.quantity || 0) - decrementAmount);
             await window.offlineDB.updateProductStock(productId, newQuantity);
+
+            // Also update appState immediately for UI
+            if (window.appState && window.appState.allProducts) {
+                const appProduct = window.appState.allProducts.find(p => p.id === productId);
+                if (appProduct) {
+                    appProduct.quantity = newQuantity;
+                }
+            }
+
             console.log(`Local stock decremented: ${product.name} -= ${decrementAmount} (now: ${newQuantity})`);
         }
     }
@@ -302,12 +311,13 @@ async function apiDecrementProductStock(productId, decrementAmount) {
     // Sync to cloud using RPC for atomic decrement
     if (canUseCloud()) {
         try {
-            // Use Supabase RPC for atomic decrement (if available)
-            // Fallback: Use SQL directly through update with GREATEST to prevent negative
+            // Use Supabase RPC for atomic decrement
             const { data, error } = await supabaseClient.rpc('decrement_stock', {
                 p_product_id: productId,
                 p_amount: decrementAmount
             });
+
+            let actualNewQuantity = null;
 
             if (error) {
                 // RPC might not exist - fallback to fetch-then-update
@@ -323,22 +333,53 @@ async function apiDecrementProductStock(productId, decrementAmount) {
                 if (fetchError) throw fetchError;
 
                 // Calculate new quantity (never go negative)
-                const newQuantity = Math.max(0, (currentProduct.quantity || 0) - decrementAmount);
+                actualNewQuantity = Math.max(0, (currentProduct.quantity || 0) - decrementAmount);
 
                 // Update with the new quantity
                 const { error: updateError } = await supabaseClient
                     .from('products')
-                    .update({ quantity: newQuantity, updated_at: new Date().toISOString() })
+                    .update({ quantity: actualNewQuantity, updated_at: new Date().toISOString() })
                     .eq('id', productId);
 
                 if (updateError) throw updateError;
 
-                console.log(`✅ Cloud stock decremented: ${productId} -= ${decrementAmount} (now: ${newQuantity})`);
-                return { success: true, newQuantity };
+            } else {
+                // RPC succeeded - get the actual new quantity
+                if (data && data.length > 0 && data[0].new_quantity !== undefined) {
+                    actualNewQuantity = data[0].new_quantity;
+                } else {
+                    // Fetch current value from server to be sure
+                    const { data: refetchData } = await supabaseClient
+                        .from('products')
+                        .select('quantity')
+                        .eq('id', productId)
+                        .single();
+                    if (refetchData) {
+                        actualNewQuantity = refetchData.quantity;
+                    }
+                }
             }
 
-            console.log(`✅ Cloud stock atomically decremented: ${productId} -= ${decrementAmount}`);
-            return { success: true, data };
+            // CRITICAL: Update local with ACTUAL server value (not optimistic)
+            // This ensures all devices show the same stock
+            if (actualNewQuantity !== null) {
+                // Update IndexedDB
+                if (hasOfflineDB()) {
+                    await window.offlineDB.updateProductStock(productId, actualNewQuantity);
+                }
+
+                // Update appState for UI
+                if (window.appState && window.appState.allProducts) {
+                    const appProduct = window.appState.allProducts.find(p => p.id === productId);
+                    if (appProduct) {
+                        appProduct.quantity = actualNewQuantity;
+                    }
+                }
+
+                console.log(`✅ Stock synced with server: ${productId} = ${actualNewQuantity}`);
+            }
+
+            return { success: true, newQuantity: actualNewQuantity };
 
         } catch (error) {
             console.error('Stock decrement failed:', error);

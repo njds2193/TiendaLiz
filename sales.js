@@ -584,9 +584,38 @@ async function confirmCartSale() {
                 });
             }
 
-            // Refresh sales grid to show updated stock values from server
+            // CRITICAL: Force refresh products from SERVER to ensure all devices show same stock
+            // This replaces optimistic local values with actual server values
+            if (navigator.onLine && window.api && window.api.client) {
+                try {
+                    console.log('🔄 Forcing product refresh from server...');
+                    const { data: freshProducts, error } = await window.api.client
+                        .from('products')
+                        .select('*')
+                        .order('created_at', { ascending: false });
+
+                    if (!error && freshProducts) {
+                        // Replace ALL products with fresh server data
+                        window.appState.allProducts = freshProducts;
+
+                        // Also update IndexedDB with fresh data
+                        if (window.offlineDB && window.offlineDB.bulkPutProducts) {
+                            await window.offlineDB.bulkPutProducts(freshProducts);
+                        }
+
+                        console.log('✅ Products refreshed from server:', freshProducts.length);
+                    }
+                } catch (err) {
+                    console.warn('Product refresh failed:', err.message);
+                }
+            }
+
+            // Refresh UI to show updated stock values
             if (window.sales && window.sales.renderProducts) {
                 window.sales.renderProducts();
+            }
+            if (window.ui && window.ui.renderProductList) {
+                window.ui.renderProductList();
             }
         } catch (error) {
             console.error('Background sync error:', error);

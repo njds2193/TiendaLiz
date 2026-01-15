@@ -121,6 +121,28 @@ async function dbUpdateProductStock(productId, newQuantity) {
     return true;
 }
 
+// DIRECT UPDATE: Update stock without creating pending operations
+// Use this when we've already synced directly with cloud (e.g., after RPC)
+// This prevents sync-manager from blocking cloud updates due to "pending changes"
+async function dbUpdateProductStockDirect(productId, newQuantity) {
+    const product = await db.products.get(productId);
+    if (!product) {
+        console.warn('Product not found for direct update:', productId);
+        return false;
+    }
+
+    const now = new Date().toISOString();
+    product.quantity = newQuantity;
+    product.updated_at = now;
+    product.sync_status = SYNC_STATUS.SYNCED; // Mark as SYNCED, not PENDING
+
+    await db.products.put(product);
+    // NO queue operation - we've already synced directly
+
+    console.log(`📌 Stock updated directly (no queue): ${product.name} = ${newQuantity}`);
+    return true;
+}
+
 // --- History Operations ---
 
 async function dbGetProductHistory(productId) {
@@ -265,6 +287,7 @@ window.offlineDB = {
     saveProduct: dbSaveProduct,
     deleteProduct: dbDeleteProduct,
     updateProductStock: dbUpdateProductStock,
+    updateProductStockDirect: dbUpdateProductStockDirect, // Direct update without pending queue
 
     // History
     getProductHistory: dbGetProductHistory,

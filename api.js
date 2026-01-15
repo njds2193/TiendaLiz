@@ -288,13 +288,20 @@ async function apiDecrementProductStock(productId, decrementAmount) {
         return { success: false, error: 'Invalid amount' };
     }
 
-    // Update local DB first (optimistic)
+    // Update local DB first (optimistic) - use DIRECT to avoid creating pending operations
+    // We will sync directly to cloud, don't need the queue
     if (hasOfflineDB()) {
         const products = await window.offlineDB.getAllProducts();
         const product = products.find(p => p.id === productId);
         if (product) {
             const newQuantity = Math.max(0, (product.quantity || 0) - decrementAmount);
-            await window.offlineDB.updateProductStock(productId, newQuantity);
+
+            // Use direct update (no queue) since we'll sync to cloud immediately
+            if (window.offlineDB.updateProductStockDirect) {
+                await window.offlineDB.updateProductStockDirect(productId, newQuantity);
+            } else {
+                await window.offlineDB.updateProductStock(productId, newQuantity);
+            }
 
             // Also update appState immediately for UI
             if (window.appState && window.appState.allProducts) {
@@ -362,10 +369,11 @@ async function apiDecrementProductStock(productId, decrementAmount) {
 
             // CRITICAL: Update local with ACTUAL server value (not optimistic)
             // This ensures all devices show the same stock
+            // Use updateProductStockDirect - NO pending queue since we already synced
             if (actualNewQuantity !== null) {
-                // Update IndexedDB
-                if (hasOfflineDB()) {
-                    await window.offlineDB.updateProductStock(productId, actualNewQuantity);
+                // Update IndexedDB DIRECTLY (no pending operations)
+                if (hasOfflineDB() && window.offlineDB.updateProductStockDirect) {
+                    await window.offlineDB.updateProductStockDirect(productId, actualNewQuantity);
                 }
 
                 // Update appState for UI

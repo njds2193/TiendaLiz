@@ -959,8 +959,11 @@ async function loadReports() {
 
             // Sort items so Extra/Descuento items appear at the end
             const sortedItems = [...tx.items].sort((a, b) => {
-                const aIsExtra = a.product_id === 'extra-adjustment';
-                const bIsExtra = b.product_id === 'extra-adjustment';
+                // Detect Extra/Descuento: product_id is null OR name contains Extra/Descuento
+                const aIsExtra = a.product_id === null ||
+                    (a.product_name && (a.product_name.includes('Extra') || a.product_name.includes('Descuento')));
+                const bIsExtra = b.product_id === null ||
+                    (b.product_name && (b.product_name.includes('Extra') || b.product_name.includes('Descuento')));
                 if (aIsExtra && !bIsExtra) return 1;  // a goes after b
                 if (!aIsExtra && bIsExtra) return -1; // a goes before b
                 return 0; // keep original order
@@ -992,7 +995,9 @@ async function loadReports() {
                     : '<span class="inline-flex items-center gap-1 bg-green-100 text-green-700 px-1.5 py-0.5 rounded text-[10px] font-bold mt-1">💵 Efectivo</span>';
 
                 // Check if this is an Extra/Descuento adjustment
-                const isExtraAdjustment = item.product_id === 'extra-adjustment';
+                // Detect by: product_id is null OR name contains Extra/Descuento
+                const isExtraAdjustment = item.product_id === null ||
+                    (item.product_name && (item.product_name.includes('Extra') || item.product_name.includes('Descuento')));
                 const isDiscount = isExtraAdjustment && item.price_sell < 0;
 
                 // Determine colors based on item type
@@ -1002,12 +1007,14 @@ async function loadReports() {
 
                 if (isExtraAdjustment) {
                     if (isDiscount) {
-                        priceColorClass = 'text-red-600';
-                        nameColorClass = 'text-red-600';
+                        // DESCUENTO: Red color
+                        priceColorClass = 'text-red-600 font-bold';
+                        nameColorClass = 'text-red-600 font-bold';
                         pricePrefix = '';
                     } else {
-                        priceColorClass = 'text-green-600';
-                        nameColorClass = 'text-green-600';
+                        // EXTRA: Green color
+                        priceColorClass = 'text-green-600 font-bold';
+                        nameColorClass = 'text-green-600 font-bold';
                         pricePrefix = '+';
                     }
                 }

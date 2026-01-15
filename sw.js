@@ -1,4 +1,4 @@
-const CACHE_NAME = 'cloudstore-v35';
+const CACHE_NAME = 'cloudstore-v36';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -14,7 +14,8 @@ const ASSETS_TO_CACHE = [
   './category-manager.js',
   './filter-menu.js',
   './app.js',
-  './theme-loader.js'
+  './theme-loader.js',
+  './edge-swipe.js'
 ];
 
 // Install event: Cache assets

@@ -483,10 +483,8 @@ async function loadReports() {
         // Always fetch fresh data to show recent sales
         allHistory = await window.api.fetchSalesHistory() || [];
 
-        if (allHistory.length === 0) {
-            container.innerHTML = '<div class="text-center text-gray-500 mt-10">No hay datos de ventas aún.</div>';
-            return;
-        }
+        // No early return - always render full UI even with no data
+        // Values will show as 0 when there's no sales history
 
         // Apply filters
         let filtered = filterHistoryByPeriod(allHistory, currentPeriod);

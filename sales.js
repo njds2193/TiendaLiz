@@ -565,7 +565,7 @@ async function confirmCartSale() {
             if (extraToProcess !== 0) {
                 const extraType = extraToProcess > 0 ? 'Recargo' : 'Descuento';
                 window.api.saveHistoryEntry({
-                    product_id: 'extra-adjustment', // Special ID for extra/adjustments
+                    product_id: null, // NULL for extra/adjustments (product_id is UUID type, can't use string)
                     action_type: 'venta',
                     quantity: 1,
                     price_sell: extraToProcess, // Can be positive (extra) or negative (discount)

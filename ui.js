@@ -37,7 +37,9 @@ const modalIds = [
     'qr-modal',
     'batch-modal',
     'category-manager-modal',
-    'restock-modal'
+    'restock-modal',
+    'expiry-modal',
+    'pdf-export-modal'
 ];
 
 function hasOpenModals() {
@@ -130,10 +132,27 @@ function switchTab(tabName, forceSwitch = false) {
 // --- MODALS ---
 function openModal(modalId) {
     document.getElementById(modalId).classList.remove('hidden');
+
+    // Ocultar el FAB cuando se abre un modal en inventario
+    if (window.appState && window.appState.currentTab === 'inventario') {
+        const fabBtn = document.getElementById('fab-btn');
+        if (fabBtn) fabBtn.classList.add('hidden');
+    }
 }
 
 function closeModal(modalId) {
     document.getElementById(modalId).classList.add('hidden');
+
+    // Mostrar el FAB solo si no hay más modales abiertos y estamos en inventario
+    // Usamos 150ms para dar tiempo a que se abra otro modal
+    if (window.appState && window.appState.currentTab === 'inventario') {
+        setTimeout(() => {
+            if (!hasOpenModals()) {
+                const fabBtn = document.getElementById('fab-btn');
+                if (fabBtn) fabBtn.classList.remove('hidden');
+            }
+        }, 150);
+    }
 }
 
 // --- RENDER HELPERS ---

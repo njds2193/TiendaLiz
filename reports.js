@@ -1780,11 +1780,28 @@ function openExpiryModal() {
     }
 
     modal.classList.remove('hidden');
+
+    // Ocultar el FAB cuando se abre un modal en inventario
+    if (window.appState && window.appState.currentTab === 'inventario') {
+        const fabBtn = document.getElementById('fab-btn');
+        if (fabBtn) fabBtn.classList.add('hidden');
+    }
 }
 
 function closeExpiryModal() {
     const modal = document.getElementById('expiry-modal');
     if (modal) modal.classList.add('hidden');
+
+    // Mostrar el FAB si estamos en inventario y no hay otros modales abiertos
+    // Usamos 150ms para dar tiempo a que se abra otro modal
+    if (window.appState && window.appState.currentTab === 'inventario') {
+        setTimeout(() => {
+            if (window.ui && !window.ui.hasOpenModals()) {
+                const fabBtn = document.getElementById('fab-btn');
+                if (fabBtn) fabBtn.classList.remove('hidden');
+            }
+        }, 150);
+    }
 }
 
 function updateExpiryBadge() {

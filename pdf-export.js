@@ -24,12 +24,29 @@ const pdfExport = (() => {
         document.getElementById('pdf-export-modal').classList.remove('hidden');
         document.getElementById('pdf-export-modal').classList.add('flex');
         updateColumnButtons();
+
+        // Ocultar el FAB cuando se abre un modal en inventario
+        if (window.appState && window.appState.currentTab === 'inventario') {
+            const fabBtn = document.getElementById('fab-btn');
+            if (fabBtn) fabBtn.classList.add('hidden');
+        }
     }
 
     // Close Export Modal
     function closeExportModal() {
         document.getElementById('pdf-export-modal').classList.add('hidden');
         document.getElementById('pdf-export-modal').classList.remove('flex');
+
+        // Mostrar el FAB si estamos en inventario y no hay otros modales abiertos
+        // Usamos 150ms para dar tiempo a que se abra otro modal
+        if (window.appState && window.appState.currentTab === 'inventario') {
+            setTimeout(() => {
+                if (window.ui && !window.ui.hasOpenModals()) {
+                    const fabBtn = document.getElementById('fab-btn');
+                    if (fabBtn) fabBtn.classList.remove('hidden');
+                }
+            }, 150);
+        }
     }
 
     // Toggle field selection

@@ -10,6 +10,13 @@ function openHistoryModal(product) {
     const typeLabels = { 'paquete': '📦 Paquete', 'unidades': '🔢 Unidades', 'ambos': '📦🔢 Ambos' };
     document.getElementById('history-product-type').textContent = typeLabels[product.product_type] || '📦 Paquete';
     document.getElementById('history-modal').classList.remove('hidden');
+
+    // Ocultar el FAB cuando se abre un modal en inventario
+    if (window.appState && window.appState.currentTab === 'inventario') {
+        const fabBtn = document.getElementById('fab-btn');
+        if (fabBtn) fabBtn.classList.add('hidden');
+    }
+
     loadProductHistory(product.id, product.product_type);
 }
 window.openHistoryModal = openHistoryModal;
@@ -17,6 +24,17 @@ window.openHistoryModal = openHistoryModal;
 function closeHistoryModal() {
     document.getElementById('history-modal').classList.add('hidden');
     currentHistoryProduct = null;
+
+    // Mostrar el FAB si estamos en inventario y no hay otros modales abiertos
+    // Usamos 150ms para dar tiempo a que se abra otro modal (ej: editar producto)
+    if (window.appState && window.appState.currentTab === 'inventario') {
+        setTimeout(() => {
+            if (window.ui && !window.ui.hasOpenModals()) {
+                const fabBtn = document.getElementById('fab-btn');
+                if (fabBtn) fabBtn.classList.remove('hidden');
+            }
+        }, 150);
+    }
 }
 window.closeHistoryModal = closeHistoryModal;
 
@@ -287,10 +305,27 @@ function openAddHistoryEntry() {
     calculateHistProfit();
 
     document.getElementById('add-history-modal').classList.remove('hidden');
+
+    // Ocultar el FAB cuando se abre un modal en inventario
+    if (window.appState && window.appState.currentTab === 'inventario') {
+        const fabBtn = document.getElementById('fab-btn');
+        if (fabBtn) fabBtn.classList.add('hidden');
+    }
 }
 
 function closeAddHistoryModal() {
     document.getElementById('add-history-modal').classList.add('hidden');
+
+    // Mostrar el FAB si estamos en inventario y no hay otros modales abiertos
+    // Usamos 150ms para dar tiempo a que se abra otro modal
+    if (window.appState && window.appState.currentTab === 'inventario') {
+        setTimeout(() => {
+            if (window.ui && !window.ui.hasOpenModals()) {
+                const fabBtn = document.getElementById('fab-btn');
+                if (fabBtn) fabBtn.classList.remove('hidden');
+            }
+        }, 150);
+    }
 }
 
 // NOTE: calculateHistoryPackage and calculateHistoryProfit removed

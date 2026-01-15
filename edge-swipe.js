@@ -1,5 +1,6 @@
 // edge-swipe.js - Gesto de borde lateral para cerrar modales
 // Deslizar desde el borde izquierdo hacia la derecha cierra ventanas
+// Incluye manejo del botón/gesto de retroceso de Android via History API
 
 (function () {
     'use strict';
@@ -16,6 +17,10 @@
     let startTime = 0;
     let currentModal = null;
     let modalContent = null;
+
+    // Stack de modales abiertos para el History API
+    let modalStack = [];
+    let isHandlingPopstate = false;
 
     // Lista de IDs de modales soportados
     const MODAL_IDS = [
@@ -69,6 +74,115 @@
                 activeModal.modal.classList.add('hidden');
             }
         }
+    }
+
+    // ========== HISTORY API - Manejo del gesto de retroceso de Android ==========
+
+    // Agregar entrada al historial cuando se abre un modal
+    function pushModalState(modalId) {
+        // Evitar duplicados en el stack
+        if (modalStack.includes(modalId)) return;
+
+        modalStack.push(modalId);
+        history.pushState({ modal: modalId, timestamp: Date.now() }, '', '');
+        console.log('📱 Modal pushed to history:', modalId, 'Stack:', modalStack);
+    }
+
+    // Remover entrada del historial cuando se cierra un modal
+    function popModalState(modalId) {
+        const index = modalStack.indexOf(modalId);
+        if (index > -1) {
+            modalStack.splice(index, 1);
+            console.log('📱 Modal removed from stack:', modalId, 'Stack:', modalStack);
+        }
+    }
+
+    // Manejar evento popstate (gesto de retroceso de Android)
+    function handlePopstate(e) {
+        // Evitar loops
+        if (isHandlingPopstate) return;
+
+        // Si hay modales en el stack, cerrar el último
+        if (modalStack.length > 0) {
+            isHandlingPopstate = true;
+
+            const modalId = modalStack.pop();
+            console.log('📱 Back gesture detected, closing:', modalId);
+
+            // Verificar si es el carrito
+            if (modalId === 'cart-panel') {
+                const cartPanel = document.getElementById('cart-panel');
+                if (cartPanel && !cartPanel.classList.contains('translate-y-full')) {
+                    if (window.sales && window.sales.toggleCart) {
+                        window.sales.toggleCart();
+                    }
+                }
+            } else {
+                // Cerrar modal normal
+                const modal = document.getElementById(modalId);
+                if (modal && !modal.classList.contains('hidden')) {
+                    if (window.ui && window.ui.closeModal) {
+                        window.ui.closeModal(modalId);
+                    } else {
+                        modal.classList.add('hidden');
+                    }
+                }
+            }
+
+            isHandlingPopstate = false;
+        }
+    }
+
+    // Observar cambios en los modales para agregar/quitar del historial automáticamente
+    function observeModals() {
+        const observer = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+                    const target = mutation.target;
+                    const modalId = target.id;
+
+                    if (!modalId) return;
+
+                    // Verificar si es un modal soportado
+                    if (MODAL_IDS.includes(modalId)) {
+                        if (!target.classList.contains('hidden')) {
+                            // Modal abierto
+                            pushModalState(modalId);
+                        } else {
+                            // Modal cerrado
+                            popModalState(modalId);
+                        }
+                    }
+
+                    // Caso especial para el carrito
+                    if (modalId === 'cart-panel') {
+                        if (!target.classList.contains('translate-y-full')) {
+                            // Carrito abierto
+                            pushModalState(modalId);
+                        } else {
+                            // Carrito cerrado
+                            popModalState(modalId);
+                        }
+                    }
+                }
+            });
+        });
+
+        // Observar todos los modales conocidos
+        MODAL_IDS.forEach(id => {
+            const modal = document.getElementById(id);
+            if (modal) {
+                observer.observe(modal, { attributes: true, attributeFilter: ['class'] });
+            }
+        });
+
+        // Observar el carrito
+        const cartPanel = document.getElementById('cart-panel');
+        if (cartPanel) {
+            observer.observe(cartPanel, { attributes: true, attributeFilter: ['class'] });
+        }
+
+        console.log('✅ Modal observers initialized for back gesture handling');
     }
 
     // Evento: inicio del toque
@@ -205,6 +319,7 @@
 
     // Inicializar listeners
     function init() {
+        // Gestos táctiles de borde
         document.addEventListener('touchstart', handleTouchStart, { passive: true });
         document.addEventListener('touchmove', handleTouchMove, { passive: false });
         document.addEventListener('touchend', handleTouchEnd, { passive: true });
@@ -213,7 +328,15 @@
             resetSwipe();
         }, { passive: true });
 
+        // History API - Manejar gesto de retroceso de Android
+        window.addEventListener('popstate', handlePopstate);
+
+        // Observar modales para el History API
+        // Usar un pequeño delay para asegurar que los modales existen
+        setTimeout(observeModals, 500);
+
         console.log('✅ Edge swipe gestures initialized');
+        console.log('✅ Android back gesture handler initialized');
     }
 
     // Inicializar cuando el DOM esté listo
@@ -223,7 +346,7 @@
         init();
     }
 
-    // Exponer API para agregar modales dinámicos
+    // Exponer API para agregar modales dinámicos y control del historial
     window.edgeSwipe = {
         addModal: (id) => {
             if (!MODAL_IDS.includes(id)) {
@@ -235,6 +358,14 @@
             if (index > -1) {
                 MODAL_IDS.splice(index, 1);
             }
+        },
+        // API para el History API
+        getModalStack: () => [...modalStack],
+        pushModal: pushModalState,
+        popModal: popModalState,
+        clearStack: () => {
+            modalStack = [];
+            console.log('📱 Modal stack cleared');
         }
     };
 })();

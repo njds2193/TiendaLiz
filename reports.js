@@ -11,6 +11,11 @@ let allHistory = [];
 let isSelectionMode = false;
 let selectedExportDates = new Set();
 
+// PERFORMANCE: History cache to avoid refetching unchanged data
+let historyLastFetch = 0;
+let historyIsDirty = false; // Set to true when a new sale is made
+const HISTORY_CACHE_TTL = 30000; // 30 seconds cache
+
 // Set period filter
 function setPeriod(period) {
     currentPeriod = period;
@@ -480,8 +485,18 @@ async function loadReports() {
     container.innerHTML = '<div class="text-center text-gray-500 mt-10">Cargando reportes...</div>';
 
     try {
-        // Always fetch fresh data to show recent sales
-        allHistory = await window.api.fetchSalesHistory() || [];
+        // PERFORMANCE: Only fetch if cache is stale or dirty
+        const now = Date.now();
+        const cacheIsStale = (now - historyLastFetch) > HISTORY_CACHE_TTL;
+
+        if (allHistory.length === 0 || cacheIsStale || historyIsDirty) {
+            console.log('📊 Fetching fresh history data...');
+            allHistory = await window.api.fetchSalesHistory() || [];
+            historyLastFetch = now;
+            historyIsDirty = false;
+        } else {
+            console.log('📊 Using cached history data');
+        }
 
         // No early return - always render full UI even with no data
         // Values will show as 0 when there's no sales history
@@ -1759,7 +1774,9 @@ window.reports = {
     getExpiringProducts,
     renderExpiringProductsSection,
     exportDailyReportPDF,
-    toggleSelectionMode
+    toggleSelectionMode,
+    // PERFORMANCE: Mark history cache as dirty (call after sales)
+    markHistoryDirty: () => { historyIsDirty = true; }
 };
 
 // --- Expiry Modal Functions ---

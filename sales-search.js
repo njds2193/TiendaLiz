@@ -290,9 +290,9 @@
         // Need at least 1 character to search
         if (query.length < 1) {
             resultsDiv?.classList.add('hidden');
-            // If no query, show all products (with active category filter if any)
-            if (window.sales && window.sales.renderProducts) {
-                window.sales.renderProducts('');
+            // If no query, show all products (using CSS filter)
+            if (window.sales && window.sales.filterGrid) {
+                window.sales.filterGrid('');
             }
             return;
         }
@@ -316,8 +316,11 @@
 
         renderSearchResults(matches);
 
-        // Also filter the main grid in real-time
-        if (window.sales && window.sales.renderProducts) {
+        // Also filter the main grid in real-time (CSS filtering)
+        if (window.sales && window.sales.filterGrid) {
+            window.sales.filterGrid(query);
+        } else if (window.sales && window.sales.renderProducts) {
+            // Fallback if filterGrid not available
             window.sales.renderProducts(query);
         }
     }
@@ -338,11 +341,14 @@
 
         resultsDiv.innerHTML = products.map(p => {
             const price = p.unit_price_sell || p.price_sell || 0;
-            const imgSrc = p.image_url || 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iI2U1ZTdlYiIvPjwvc3ZnPg==';
+            // Use getSafeImageUrl to handle local:// URLs
+            const imgSrc = window.perfUtils && window.perfUtils.getSafeImageUrl
+                ? window.perfUtils.getSafeImageUrl(p.image_url)
+                : (p.image_url || 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iI2U1ZTdlYiIvPjwvc3ZnPg==');
 
             return `
                 <div class="sales-search-result" onclick="window.salesSearch.selectProduct('${p.id}')">
-                    <img src="${imgSrc}" alt="${p.name}" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iI2U1ZTdlYiIvPjwvc3ZnPg=='">
+                    <img src="${imgSrc}" data-local-url="${p.image_url || ''}" alt="${p.name}" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iI2U1ZTdlYiIvPjwvc3ZnPg=='">
                     <div class="result-info">
                         <div class="result-name">${p.name}</div>
                         <div class="result-category">${p.category || 'Sin categoría'}</div>
@@ -354,6 +360,11 @@
         }).join('');
 
         resultsDiv.classList.remove('hidden');
+
+        // Trigger image caching for new results
+        if (window.perfUtils && window.perfUtils.initImageCaching) {
+            window.perfUtils.initImageCaching();
+        }
     }
 
     function selectProduct(productId) {
@@ -386,8 +397,10 @@
         clearBtn?.classList.add('hidden');
         currentSearchQuery = '';
 
-        // Refresh products with current category filter
-        if (window.sales && window.sales.renderProducts) {
+        // Refresh products with current category filter (using CSS)
+        if (window.sales && window.sales.filterGrid) {
+            window.sales.filterGrid('');
+        } else if (window.sales && window.sales.renderProducts) {
             window.sales.renderProducts('');
         }
     }

@@ -117,7 +117,14 @@ function switchTab(tabName, forceSwitch = false) {
         }
         if (window.sales) {
             window.sales.loadCategories();
-            window.sales.renderProducts();
+            // Don't re-render products to keep state persistent
+            // window.sales.renderProducts(); 
+
+            // If grid is empty (first load), then render
+            const grid = document.getElementById('sales-products-grid');
+            if (grid && grid.children.length === 0) {
+                window.sales.renderProducts();
+            }
         }
     } else if (tabName === 'reportes') {
         if (window.reports) {
@@ -201,9 +208,14 @@ function renderProductList(products, containerId = 'product-list') {
                 '</div>';
         }
 
+        // Use getSafeImageUrl to handle local:// URLs
+        const safeImageUrl = window.perfUtils && window.perfUtils.getSafeImageUrl
+            ? window.perfUtils.getSafeImageUrl(p.image_url)
+            : (p.image_url || 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PHJlY3Qgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiIGZpbGw9IiNlN2U3ZTciLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9InNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTkiPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg==');
+
         return '<div class="bg-white rounded-lg shadow-md overflow-hidden product-card">' +
             '<div class="flex">' +
-            '<img src="' + (p.image_url || 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PHJlY3Qgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiIGZpbGw9IiNlN2U3ZTciLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9InNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTkiPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg==') + '" class="w-24 h-24 object-cover cursor-pointer" onclick="window.app.openHistory(window.appState.allProducts.find(x => x.id === \'' + p.id + '\'))">' +
+            '<img loading="lazy" src="' + safeImageUrl + '" data-local-url="' + (p.image_url || '') + '" class="w-24 h-24 object-cover cursor-pointer" onclick="window.app.openHistory(window.appState.allProducts.find(x => x.id === \'' + p.id + '\'))">' +
             '<div class="p-3 flex-1 cursor-pointer" onclick="window.app.openHistory(window.appState.allProducts.find(x => x.id === \'' + p.id + '\'))">' +
             '<h3 class="font-bold text-gray-800 truncate">' + p.name + '</h3>' +
             '<p class="text-sm text-gray-500">' + (p.category || 'Sin categoría') + '</p>' +

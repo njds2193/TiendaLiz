@@ -224,15 +224,48 @@ function loadCategories() {
 function selectCategory(category) {
     salesCategory = category;
     loadCategories();
-    renderProducts();
+    // Use CSS filtering instead of re-rendering
+    filterGridByCategory(category);
+}
+
+// New function for CSS Category Filtering
+function filterGridByCategory(category) {
+    // Ensure the style exists
+    if (!document.getElementById('sales-filter-style')) {
+        const style = document.createElement('style');
+        style.id = 'sales-filter-style';
+        style.textContent = `
+            .hidden-by-category { display: none !important; }
+        `;
+        document.head.appendChild(style);
+    }
+
+    const grid = document.getElementById('sales-products-grid');
+    if (!grid) return;
+
+    const cards = grid.querySelectorAll('.product-card');
+
+    cards.forEach(card => {
+        // If category is null (Todos), show all (remove hidden-by-category)
+        // If category matches data-category, show
+        // Otherwise hide
+        if (!category || card.dataset.category === category) {
+            card.classList.remove('hidden-by-category');
+        } else {
+            card.classList.add('hidden-by-category');
+        }
+    });
+
+    // Reset scroll to top when changing category
+    const container = document.getElementById('sales-products');
+    if (container) container.scrollTop = 0;
 }
 
 function renderProducts(searchQuery = '') {
+    // LOAD ALL STRATEGY: Render ALL products initially
     let products = [...window.appState.allProducts];
-    if (salesCategory) products = products.filter(p => p.category === salesCategory);
-    if (searchQuery) products = products.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
-    // Sort by sales count
+    // Sort by sales count (Popularity)
     products.sort((a, b) => (window.appState.productSalesCount[b.id] || 0) - (window.appState.productSalesCount[a.id] || 0));
 
     const grid = document.getElementById('sales-products-grid');
@@ -241,6 +274,10 @@ function renderProducts(searchQuery = '') {
         grid.innerHTML = '<div class="col-span-3 text-center text-gray-400 py-8">No hay productos</div>';
         return;
     }
+
+    // Optimization: Render all products but hide those that don't match search
+    // This allows instant filtering without re-rendering DOM
+    const normalizedQuery = searchQuery.toLowerCase();
 
     grid.innerHTML = products.map(p => {
         const salesCount = window.appState.productSalesCount[p.id] || 0;
@@ -283,12 +320,24 @@ function renderProducts(searchQuery = '') {
             priceDisplay = `<span class="text-green-600 font-bold text-sm">Bs ${Number(p.unit_price_sell || p.price_sell || 0).toFixed(2)}</span>`;
         }
 
-        return `<div class="product-card bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg cursor-pointer active:scale-95 transition-transform" 
+        // Use getSafeImageUrl to handle local:// URLs
+        const safeImgUrl = window.perfUtils && window.perfUtils.getSafeImageUrl
+            ? window.perfUtils.getSafeImageUrl(p.image_url)
+            : (p.image_url || 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PHJlY3Qgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiIGZpbGw9IiNlN2U3ZTciLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9InNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTkiPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg==');
+
+        // Determine visibility based on search query AND category
+        // We use a specific class 'hidden-by-category' to distinguish from search filtering
+        const isCategoryMatch = !salesCategory || p.category === salesCategory;
+        const hiddenClass = isCategoryMatch ? '' : 'hidden-by-category';
+
+        return `<div class="product-card bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg cursor-pointer active:scale-95 transition-transform ${hiddenClass}" 
                      data-product-id="${p.id}"
+                     data-search-key="${p.name.toLowerCase()}"
+                     data-category="${p.category ? p.category.replace(/"/g, '&quot;') : ''}"
                      onclick="${tapAction}">
             <div class="relative">
                 ${boxButton}
-                <img src="${p.image_url || 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PHJlY3Qgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiIGZpbGw9IiNlN2U3ZTciLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9InNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTkiPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg=='}" class="w-full h-24 object-cover">
+                <img loading="lazy" src="${safeImgUrl}" data-local-url="${p.image_url || ''}" class="w-full h-24 object-cover">
                 ${salesCount > 0 ? `<span class="absolute top-1 right-1 bg-orange-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">${salesCount}</span>` : ''}
                 <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-1">
                     <p class="text-white text-xs truncate font-medium text-center" title="${p.name}">${p.name}</p>
@@ -301,23 +350,53 @@ function renderProducts(searchQuery = '') {
         </div>`;
     }).join('');
 
-    // SCROLL RESET: AFTER rendering content, scroll to top
-    // Use requestAnimationFrame + setTimeout to ensure DOM is fully updated (especially on mobile)
+    // Apply initial category filter if needed (redundant but safe)
+    if (salesCategory) {
+        filterGridByCategory(salesCategory);
+    }
+
+    // Apply search filter if needed
+    if (searchQuery) {
+        filterGrid(searchQuery);
+    }
+
+    // SCROLL RESET: ONLY if we are rendering for the first time or changing category
+    // If we are just filtering, we might not want to reset scroll? 
+    // Actually, if we filter, the layout changes, so scroll reset is usually good.
     if (searchQuery) {
         requestAnimationFrame(() => {
             setTimeout(() => {
                 const container = document.getElementById('sales-products');
                 if (container) {
                     container.scrollTop = 0;
-                    // Also try scrollIntoView for better mobile compatibility
-                    const firstProduct = grid.querySelector('.product-card');
-                    if (firstProduct) {
-                        firstProduct.scrollIntoView({ behavior: 'instant', block: 'start' });
-                    }
                 }
             }, 50);
         });
     }
+}
+
+// New function for instant CSS filtering
+function filterGrid(query) {
+    const grid = document.getElementById('sales-products-grid');
+    if (!grid) return;
+
+    const normalizedQuery = query.toLowerCase();
+    const cards = grid.querySelectorAll('.product-card');
+    let hasVisible = false;
+
+    cards.forEach(card => {
+        const key = card.dataset.searchKey || '';
+        if (key.includes(normalizedQuery)) {
+            card.classList.remove('hidden');
+            hasVisible = true;
+        } else {
+            card.classList.add('hidden');
+        }
+    });
+
+    // Show "no results" message if needed? 
+    // Currently the grid doesn't have a persistent "no results" element, 
+    // but we could add one if we wanted to be fancy.
 }
 
 function addToCart(productId, isBox = false) {
@@ -431,9 +510,14 @@ function updateCartDisplay() {
         return;
     }
 
-    itemsContainer.innerHTML = window.appState.cartItems.map(item =>
-        `<div class="flex items-center gap-2 bg-white rounded-lg p-2 mb-2 shadow-sm">
-            <img src="${item.image || 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PHJlY3Qgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiIGZpbGw9IiNlN2U3ZTciLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9InNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTkiPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg=='}" class="w-10 h-10 rounded object-cover">
+    itemsContainer.innerHTML = window.appState.cartItems.map(item => {
+        // Use getSafeImageUrl to handle local:// URLs
+        const safeImgUrl = window.perfUtils && window.perfUtils.getSafeImageUrl
+            ? window.perfUtils.getSafeImageUrl(item.image)
+            : (item.image || 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PHJlY3Qgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiIGZpbGw9IiNlN2U3ZTciLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9InNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTkiPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg==');
+
+        return `<div class="flex items-center gap-2 bg-white rounded-lg p-2 mb-2 shadow-sm">
+            <img src="${safeImgUrl}" data-local-url="${item.image || ''}" class="w-10 h-10 rounded object-cover">
             <div class="flex-1 min-w-0">
                 <p class="text-sm font-medium truncate">${item.name}</p>
                 <p class="text-xs text-gray-500">Bs ${item.price.toFixed(2)}</p>
@@ -446,8 +530,8 @@ function updateCartDisplay() {
                         class="w-8 h-8 bg-green-100 text-green-600 rounded-full font-bold text-lg active:scale-90 transition-transform">+</button>
             </div>
             <span class="text-green-600 font-bold text-sm w-16 text-right">Bs ${(item.quantity * item.price).toFixed(2)}</span>
-        </div>`
-    ).join('');
+        </div>`;
+    }).join('');
 }
 
 async function confirmCartSale() {
@@ -582,6 +666,11 @@ async function confirmCartSale() {
                 }).catch(e => {
                     console.warn('Extra history sync pending:', e.message);
                 });
+            }
+
+            // PERFORMANCE: Invalidate reports cache so next view shows fresh data
+            if (window.reports && window.reports.markHistoryDirty) {
+                window.reports.markHistoryDirty();
             }
 
             // CRITICAL: Force refresh products from SERVER to ensure all devices show same stock
@@ -754,7 +843,8 @@ window.sales = {
     resetExtra,
     addReceived,
     resetReceived,
-    setPaymentMethod
+    setPaymentMethod,
+    filterGrid
 };
 
 // Change Calculator functionality

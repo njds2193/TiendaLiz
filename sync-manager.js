@@ -6,7 +6,7 @@ console.log('--- Loading sync-manager.js ---');
 const syncManager = (() => {
     let isSyncing = false;
     let syncInterval = null;
-    const SYNC_INTERVAL_MS = 10000; // Auto-sync every 10 seconds for multi-device support
+    const SYNC_INTERVAL_MS = 30000; // Auto-sync every 30 seconds (reduced for better performance)
 
     // --- Network Status ---
 
@@ -209,47 +209,99 @@ const syncManager = (() => {
         updateSyncStatusUI('syncing');
 
         try {
-            // Fetch all products from Supabase
-            const { data: cloudProducts, error: productError } = await window.api.client
+            // OPTIMIZATION: Light Sync Strategy
+            // 1. Fetch only IDs and timestamps from Cloud (Manifest)
+            // This is much smaller (~5KB) than fetching all data (~500KB)
+            const { data: cloudManifest, error: manifestError } = await window.api.client
                 .from('products')
-                .select('*')
-                .order('created_at', { ascending: false });
+                .select('id, updated_at');
 
-            if (productError) throw productError;
+            if (manifestError) throw manifestError;
 
-            // Get local products to check for conflicts
+            // 2. Get local state
             const localProducts = await window.offlineDB.getAllProducts();
             const localPending = await window.offlineDB.getPendingOperations();
 
-            // Get IDs of products with pending changes
+            // Map local products for O(1) lookup
+            const localMap = new Map(localProducts.map(p => [p.id, p]));
+
+            // Identify pending changes to avoid overwriting them
             const pendingProductIds = new Set(
                 localPending
                     .filter(op => op.table_name === 'products')
                     .map(op => op.record_id)
             );
 
-            // Merge: Cloud wins EXCEPT for products with pending local changes
-            const productsToSave = cloudProducts.map(cloudProduct => {
-                if (pendingProductIds.has(cloudProduct.id)) {
-                    // Keep local version if we have pending changes
-                    const localProduct = localProducts.find(p => p.id === cloudProduct.id);
-                    if (localProduct && localProduct.updated_at > cloudProduct.updated_at) {
-                        console.log(`Keeping local version of ${cloudProduct.id} (pending changes)`);
-                        return localProduct;
+            // 3. Calculate Delta (What changed?)
+            const idsToFetch = [];
+            const idsToDelete = [];
+            const cloudIds = new Set();
+
+            for (const cloudItem of cloudManifest) {
+                cloudIds.add(cloudItem.id);
+
+                // Skip if we have pending local changes for this item
+                if (pendingProductIds.has(cloudItem.id)) continue;
+
+                const localItem = localMap.get(cloudItem.id);
+
+                if (!localItem) {
+                    // New product in cloud
+                    idsToFetch.push(cloudItem.id);
+                } else {
+                    // Check if cloud is newer
+                    const cloudTime = new Date(cloudItem.updated_at).getTime();
+                    const localTime = new Date(localItem.updated_at).getTime();
+
+                    // If cloud is newer (allow 1s buffer for clock skew)
+                    if (cloudTime > localTime + 1000) {
+                        idsToFetch.push(cloudItem.id);
                     }
                 }
-                return cloudProduct;
-            });
+            }
 
-            // Save to local DB
-            await window.offlineDB.bulkPutProducts(productsToSave);
+            // Identify deleted products (exist locally but not in cloud)
+            for (const localItem of localProducts) {
+                if (!cloudIds.has(localItem.id) && !pendingProductIds.has(localItem.id)) {
+                    idsToDelete.push(localItem.id);
+                }
+            }
 
-            // Also sync history (sales records)
+            console.log(`📊 Sync Analysis: ${idsToFetch.length} to fetch, ${idsToDelete.length} to delete`);
+
+            // 4. Fetch details ONLY for changed items
+            let fetchedCount = 0;
+            if (idsToFetch.length > 0) {
+                // Fetch in chunks of 50 to avoid URL length limits
+                const chunkSize = 50;
+                for (let i = 0; i < idsToFetch.length; i += chunkSize) {
+                    const chunk = idsToFetch.slice(i, i + chunkSize);
+
+                    const { data: productsChunk, error: fetchError } = await window.api.client
+                        .from('products')
+                        .select('*')
+                        .in('id', chunk);
+
+                    if (fetchError) throw fetchError;
+
+                    if (productsChunk && productsChunk.length > 0) {
+                        await window.offlineDB.bulkPutProducts(productsChunk);
+                        fetchedCount += productsChunk.length;
+                    }
+                }
+            }
+
+            // 5. Remove deleted items
+            if (idsToDelete.length > 0) {
+                await window.offlineDB.db.products.bulkDelete(idsToDelete);
+            }
+
+            // 6. Sync History (Keep as is - usually append only)
             const { data: cloudHistory, error: historyError } = await window.api.client
                 .from('product_history')
                 .select('*')
                 .order('created_at', { ascending: false })
-                .limit(500); // Limit to last 500 entries
+                .limit(50); // Reduced limit for auto-sync (was 500)
 
             if (historyError) throw historyError;
 
@@ -257,14 +309,15 @@ const syncManager = (() => {
                 await window.offlineDB.bulkPutHistory(cloudHistory);
             }
 
-            console.log(`Synced ${productsToSave.length} products and ${cloudHistory?.length || 0} history entries from cloud`);
+            console.log(`✅ Sync Complete: Fetched ${fetchedCount}, Deleted ${idsToDelete.length}, History ${cloudHistory?.length || 0}`);
 
             isSyncing = false;
             updateSyncStatusUI('idle');
 
             return {
                 success: true,
-                products: productsToSave.length,
+                products: fetchedCount,
+                deleted: idsToDelete.length,
                 history: cloudHistory?.length || 0
             };
 

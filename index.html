@@ -8,7 +8,7 @@
     <link rel="manifest" href="./manifest.json">
     <link rel="icon" type="image/x-icon" href="./favicon.ico">
     <meta name="theme-color" content="#C2714F">
-    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="TiendaLIZ">
     <link rel="apple-touch-icon" href="./icon/icon-192.png">
@@ -512,7 +512,15 @@
                             <span class="text-4xl block mb-2">📷</span>
                             <span class="text-gray-400 text-sm">Toca para subir imagen</span>
                         </div>
-                        <img id="preview-img" src="" class="w-full h-48 object-cover rounded-xl hidden mt-2 shadow-lg">
+                        <div id="preview-container" class="relative hidden mt-2 group cursor-pointer"
+                            onclick="document.getElementById('product-image').click()">
+                            <img id="preview-img" src="" class="w-full h-48 object-cover rounded-xl shadow-lg">
+                            <div class="absolute inset-0 bg-black/20 flex items-center justify-center rounded-xl">
+                                <span
+                                    class="bg-white/80 text-gray-800 px-3 py-1 rounded-full text-sm font-bold shadow-sm backdrop-blur-sm">📷
+                                    Cambiar</span>
+                            </div>
+                        </div>
                         <input type="file" id="product-image" accept="image/*" class="hidden">
                     </div>
                     <!-- SECTION: Basic Info -->
@@ -965,6 +973,7 @@
     <!-- Scripts -->
     <script src="api.js"></script>
     <script src="offline-db.js"></script>
+    <script src="performance-utils.js"></script>
     <script src="ui.js"></script>
     <script src="sync-manager.js"></script>
     <script src="realtime-sync.js"></script>

@@ -179,14 +179,17 @@ function openEditModal(productId) {
 
     const previewImg = document.getElementById('preview-img');
     const imagePreviewDiv = document.getElementById('image-preview');
+    const previewContainer = document.getElementById('preview-container');
 
     if (product.image_url) {
         previewImg.src = product.image_url;
-        previewImg.classList.remove('hidden');
+        if (previewContainer) previewContainer.classList.remove('hidden');
+        else previewImg.classList.remove('hidden'); // Fallback
         imagePreviewDiv.classList.add('hidden');
     } else {
         previewImg.src = '';
-        previewImg.classList.add('hidden');
+        if (previewContainer) previewContainer.classList.add('hidden');
+        else previewImg.classList.add('hidden'); // Fallback
         imagePreviewDiv.classList.remove('hidden');
     }
 
@@ -340,8 +343,21 @@ async function handleProductSubmit(e) {
 
         // Upload Image
         if (imageInput.files.length > 0) {
-            const file = imageInput.files[0];
-            const fileName = Date.now() + '.' + file.name.split('.').pop();
+            let file = imageInput.files[0];
+
+            // Compress image if possible
+            if (window.perfUtils && window.perfUtils.compressImage) {
+                try {
+                    window.ui.showToast('Comprimiendo imagen...', 'info');
+                    const compressedBlob = await window.perfUtils.compressImage(file);
+                    // Create a new File object from the blob to keep the name
+                    file = new File([compressedBlob], file.name, { type: 'image/jpeg' });
+                } catch (e) {
+                    console.warn('Image compression failed, using original:', e);
+                }
+            }
+
+            const fileName = Date.now() + '.jpg'; // Always save as jpg
             imageUrl = await window.api.uploadImage(file, fileName);
         }
 
@@ -585,8 +601,13 @@ function setupEventListeners() {
                 reader.onload = ev => {
                     const previewImg = document.getElementById('preview-img');
                     const imagePreviewDiv = document.getElementById('image-preview');
+                    const previewContainer = document.getElementById('preview-container');
+
                     previewImg.src = ev.target.result;
-                    previewImg.classList.remove('hidden');
+
+                    if (previewContainer) previewContainer.classList.remove('hidden');
+                    else previewImg.classList.remove('hidden');
+
                     imagePreviewDiv.classList.add('hidden');
                 };
                 reader.readAsDataURL(file);
@@ -594,11 +615,11 @@ function setupEventListeners() {
         });
     }
 
-    // Search Input
+    // Search Input with DEBOUNCE for performance
     const searchInput = document.getElementById('search-input');
     if (searchInput) {
-        searchInput.addEventListener('input', (e) => {
-            const query = e.target.value.toLowerCase();
+        // Create debounced search function (300ms delay)
+        const debouncedSearch = window.perfUtils ? window.perfUtils.debounce((query) => {
             if (window.appState.currentTab === 'inventario') {
                 const filtered = window.appState.allProducts.filter(p =>
                     p.name.toLowerCase().includes(query) ||
@@ -607,6 +628,24 @@ function setupEventListeners() {
                 window.ui.renderProductList(filtered, 'product-list');
             } else if (window.appState.currentTab === 'ventas') {
                 window.sales.renderProducts(query);
+            }
+        }, 300) : null;
+
+        searchInput.addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase();
+            if (debouncedSearch) {
+                debouncedSearch(query);
+            } else {
+                // Fallback without debounce if perfUtils not loaded
+                if (window.appState.currentTab === 'inventario') {
+                    const filtered = window.appState.allProducts.filter(p =>
+                        p.name.toLowerCase().includes(query) ||
+                        (p.category && p.category.toLowerCase().includes(query))
+                    );
+                    window.ui.renderProductList(filtered, 'product-list');
+                } else if (window.appState.currentTab === 'ventas') {
+                    window.sales.renderProducts(query);
+                }
             }
         });
     }

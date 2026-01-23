@@ -231,6 +231,52 @@ async function dbGetCachedImage(url) {
     return cached ? cached.blob : null;
 }
 
+// Get image from cache or fetch from network and cache it
+async function dbGetOrFetchImage(url) {
+    if (!url || url.startsWith('data:')) return url; // Skip data URIs
+
+    try {
+        // Check cache first
+        const cached = await db.image_cache.get(url);
+        if (cached && cached.blob) {
+            // Return cached blob as object URL
+            return URL.createObjectURL(cached.blob);
+        }
+
+        // Not in cache - fetch from network
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('Fetch failed');
+
+        const blob = await response.blob();
+
+        // Cache the blob
+        await db.image_cache.put({
+            url: url,
+            blob: blob,
+            cached_at: new Date().toISOString()
+        });
+
+        console.log('📸 Image cached:', url.substring(0, 50) + '...');
+        return URL.createObjectURL(blob);
+    } catch (error) {
+        console.warn('Image cache error:', error.message);
+        return url; // Fallback to original URL
+    }
+}
+
+// Clear all cached images
+async function dbClearImageCache() {
+    const count = await db.image_cache.count();
+    await db.image_cache.clear();
+    console.log(`🗑️ Cleared ${count} cached images`);
+    return count;
+}
+
+// Delete a specific cached image (call when product image is changed)
+async function dbDeleteCachedImage(url) {
+    await db.image_cache.delete(url);
+}
+
 // --- Bulk Operations for Sync ---
 
 async function dbBulkPutProducts(products) {
@@ -305,6 +351,9 @@ window.offlineDB = {
     // Image Cache
     cacheImage: dbCacheImage,
     getCachedImage: dbGetCachedImage,
+    getOrFetchImage: dbGetOrFetchImage,
+    clearImageCache: dbClearImageCache,
+    deleteCachedImage: dbDeleteCachedImage,
 
     // Bulk Sync
     bulkPutProducts: dbBulkPutProducts,

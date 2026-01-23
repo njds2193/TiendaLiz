@@ -77,6 +77,7 @@ const realtimeSync = (() => {
     }
 
     // Handle product changes from other devices
+    // OPTIMIZED: For UPDATE events, only sync quantity (stock) to preserve local cached data
     function handleProductChange(payload) {
         const { eventType, new: newData, old: oldData } = payload;
 
@@ -88,34 +89,70 @@ const realtimeSync = (() => {
         lastRemoteUpdate = now;
 
         if (eventType === 'UPDATE' && newData) {
-            // Update local product data
+            // Find local product
             const index = window.appState.allProducts.findIndex(p => p.id === newData.id);
 
             if (index !== -1) {
-                const oldQuantity = window.appState.allProducts[index].quantity;
+                const localProduct = window.appState.allProducts[index];
+                const oldQuantity = localProduct.quantity;
                 const newQuantity = newData.quantity;
 
-                // Update the product
-                window.appState.allProducts[index] = {
-                    ...window.appState.allProducts[index],
-                    ...newData
-                };
+                // SELECTIVE SYNC: Only update quantity (stock) - preserve local static data
+                // Static data (name, price, image, etc.) only changes when user explicitly edits
+                // This reduces bandwidth and preserves cached images/data
+                const isStockOnlyUpdate = (
+                    localProduct.name === newData.name &&
+                    localProduct.price_sell === newData.price_sell &&
+                    localProduct.image_url === newData.image_url
+                );
 
-                // Also update in IndexedDB
-                if (window.offlineDB && window.offlineDB.db) {
-                    window.offlineDB.db.products.put({
-                        ...newData,
-                        sync_status: 'synced'
-                    }).catch(e => console.warn('Failed to update local DB:', e));
+                if (isStockOnlyUpdate) {
+                    // QUANTITY-ONLY update (most common case - sales)
+                    window.appState.allProducts[index].quantity = newQuantity;
+                    window.appState.allProducts[index].updated_at = newData.updated_at;
+
+                    // Update only quantity in IndexedDB (faster)
+                    if (window.offlineDB && window.offlineDB.db) {
+                        window.offlineDB.db.products.update(newData.id, {
+                            quantity: newQuantity,
+                            updated_at: newData.updated_at,
+                            sync_status: 'synced'
+                        }).catch(e => console.warn('Failed to update local DB:', e));
+                    }
+
+                    console.log(`📡 Stock sync: ${localProduct.name} = ${newQuantity}`);
+                } else {
+                    // FULL update (product was edited - rare)
+                    window.appState.allProducts[index] = {
+                        ...localProduct,
+                        ...newData
+                    };
+
+                    // Full update in IndexedDB
+                    if (window.offlineDB && window.offlineDB.db) {
+                        window.offlineDB.db.products.put({
+                            ...newData,
+                            sync_status: 'synced'
+                        }).catch(e => console.warn('Failed to update local DB:', e));
+                    }
+
+                    console.log(`📡 Full sync: ${newData.name} (product edited)`);
                 }
 
                 // Show notification if stock changed significantly
                 if (oldQuantity !== newQuantity) {
-                    showRemoteUpdateNotification(newData.name, oldQuantity, newQuantity);
+                    showRemoteUpdateNotification(localProduct.name, oldQuantity, newQuantity);
                 }
 
-                // Refresh UI
-                refreshUI();
+                // STABILITY UPDATE: Update DOM directly instead of full refresh
+                updateProductCardDOM(localProduct.id, localProduct);
+
+                // Also update inventory list if visible
+                if (window.appState.currentTab === 'inventario') {
+                    // For inventory, we might still need to refresh or update row
+                    // But let's try to be smart about it
+                    refreshUI();
+                }
             }
         } else if (eventType === 'INSERT' && newData) {
             // New product added from another device
@@ -188,6 +225,59 @@ const realtimeSync = (() => {
         }
     }
 
+    // Helper to update a specific product card in the DOM without re-rendering
+    function updateProductCardDOM(productId, product) {
+        // Find the card
+        const card = document.querySelector(`.product-card[data-product-id="${productId}"]`);
+        if (!card) return;
+
+        // Update stock display
+        // We need to reconstruct the stock HTML based on product type
+        let stockDisplay = '';
+        if (product.product_type === 'ambos' && product.units_per_package > 1) {
+            const boxes = Math.floor((product.quantity || 0) / product.units_per_package);
+            const units = (product.quantity || 0) % product.units_per_package;
+            stockDisplay = `📦 ${boxes} + 🔢 ${units}`;
+        } else if (product.product_type === 'paquete') {
+            stockDisplay = `📦 ${product.quantity || 0}`;
+        } else {
+            stockDisplay = `🔢 ${product.quantity || 0}`;
+        }
+
+        // Find the stock element (it's usually the last span in the second div)
+        // Structure: div.p-1.5 > div.text-[10px]
+        const stockEl = card.querySelector('.text-\\[10px\\]');
+        if (stockEl) {
+            stockEl.innerHTML = stockDisplay;
+            // Add a subtle flash effect
+            stockEl.classList.add('text-green-600', 'font-bold');
+            setTimeout(() => {
+                stockEl.classList.remove('text-green-600', 'font-bold');
+            }, 1000);
+        }
+
+        // Update sales count badge if it exists or needs to be added
+        const salesCount = window.appState.productSalesCount[productId] || 0;
+        let badge = card.querySelector('.bg-orange-500');
+
+        if (salesCount > 0) {
+            if (badge) {
+                badge.textContent = salesCount;
+            } else {
+                // Add badge if it doesn't exist
+                const imgContainer = card.querySelector('.relative');
+                if (imgContainer) {
+                    const newBadge = document.createElement('span');
+                    newBadge.className = 'absolute top-1 right-1 bg-orange-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold';
+                    newBadge.textContent = salesCount;
+                    imgContainer.appendChild(newBadge);
+                }
+            }
+        } else if (badge) {
+            badge.remove();
+        }
+    }
+
     // Refresh UI after remote changes - RESPECTING ACTIVE FILTERS
     function refreshUI() {
         // Check if we're on the inventory tab
@@ -225,17 +315,23 @@ const realtimeSync = (() => {
         }
 
         // Refresh sales grid - RESPECTING ACTIVE SEARCH FILTER
-        if (window.sales && window.sales.renderProducts) {
+        // Refresh sales grid - STABILITY UPDATE: Update DOM directly, don't re-render
+        if (window.sales) {
             // Check if salesSearch has an active filter (search query or category)
             const salesHasFilter = window.salesSearch && window.salesSearch.hasActiveFilter && window.salesSearch.hasActiveFilter();
 
             if (salesHasFilter) {
                 // Sales search is active - don't reset the view
                 console.log('📌 Sales filter active - keeping current view');
-                // Data in allProducts is already updated, the current filtered view stays
             } else {
-                // No filter in sales - safe to refresh
-                window.sales.renderProducts();
+                // STABILITY: Don't call renderProducts() which destroys/recreates DOM
+                // Instead, we should have updated the DOM in handleProductChange
+                // But if we are here, it might be a generic refresh.
+                // Let's try to update visible cards only if possible.
+
+                // Actually, handleProductChange should handle the DOM update for specific products.
+                // Here we just want to ensure we don't blindly re-render.
+                console.log('📌 Realtime refresh - Skipping full re-render for stability');
             }
         }
 
